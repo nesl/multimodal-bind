@@ -2,7 +2,9 @@ Download the processed PAMAP dataset at this link: https://drive.google.com/file
 
 Place it in the same directory as this cloned repository 
 
-i.e: parent directory
+i.e: 
+
+parent directory
 
             PAMAP-Code
             
