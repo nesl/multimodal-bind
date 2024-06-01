@@ -33,7 +33,7 @@ Train Dataset C is treated as a labeled Gyro + Mag dataset
 
 ### Baseline 1: Autoencoders
 
-*Training*
+**Training**
 
 We train independent autoencoders (gyro on dataset A, and mag on dataset B), and load the pretrained weights of each encoder to finetune on dataset C
 
@@ -42,7 +42,10 @@ python3 main_baseline1_separate_autoencoder.py // Trains the gyro encoder
 python3 main_baseline2_separate_autoencoder.py --dataset train_B // Trains the mag encoder
 ```
 
-This will generate two folders under train/save_baseline1 where the weights are stored
+This will generate two folders under `train/save_baseline1` where the weights are stored
 
-*Evaluation*
-We evaluate by running the following code `python3 main_fuse_sup_baseline1.py`
+**Evaluation**
+
+We evaluate by running the following code `python3 main_fuse_sup_baseline1.py`, which will automatically load the pretrained weights and fine-tune on dataset C, while also performing validation on the test dataset
+
+Results are saved under `evaluation/save_train_C/label_216/baseline1/results/test_accuracy.txt`
