@@ -46,7 +46,7 @@ def parse_option():
                         help='number of training epochs')
 
     # optimization
-    parser.add_argument('--learning_rate', type=float, default=1e-3,
+    parser.add_argument('--learning_rate', type=float, default=1e-4,
                         help='learning rate')
     parser.add_argument('--momentum', type=float, default=0.9,
                         help='momentum')
@@ -59,13 +59,14 @@ def parse_option():
 
     # model dataset
     parser.add_argument('--model', type=str, default='MyUTDmodel')
-    parser.add_argument('--dataset', type=str, default='train_all_paired_AB', help='dataset')
-    parser.add_argument('--load_pretrain', type=str, default='load_pretrain', help='load_pretrain')
+    parser.add_argument('--dataset', type=str, default='train_AB',
+                        choices=['train_A', 'train_B', 'train_AB'], help='dataset')
     parser.add_argument('--num_class', type=int, default=27,
                         help='num_class')
     # temperature
     parser.add_argument('--temp', type=float, default=0.07,
                         help='temperature for loss function')
+    parser.add_argument('--load_pretrain', type=str, default='no_load', help='load_pretrain')
 
     # other setting
     parser.add_argument('--cosine', action='store_true',
@@ -77,13 +78,15 @@ def parse_option():
     parser.add_argument('--trial', type=str, default='0',
                         help='id for recording multiple runs')
     parser.add_argument('--seed', type=int, default=100)
+
+
     opt = parser.parse_args()
 
     torch.manual_seed(opt.seed)
     np.random.seed(opt.seed)
 
     # set the path according to the environment
-    opt.save_path = "./save_mmbind/save_{}_contrastive_weighted_{}/".format(opt.dataset, opt.load_pretrain)
+    opt.save_path = "./save_baseline2/save_{}_mask_contrastive_{}/".format(opt.dataset, opt.load_pretrain)
     opt.model_path = opt.save_path + 'models'
     opt.tb_path = opt.save_path + 'tensorboard'
     opt.result_path = opt.save_path + 'results/'

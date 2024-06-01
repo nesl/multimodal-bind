@@ -1,9 +1,9 @@
-from __future__ import print_function
-
 import math
+import pprint
 import numpy as np
 import torch
 import torch.optim as optim
+from modules.print_utils import pprint
 
 
 class TwoCropTransform:
@@ -86,7 +86,7 @@ def set_optimizer(opt, model):
 
 
 def save_model(model, optimizer, opt, epoch, save_file):
-    print('==> Saving...')
+    pprint(f'==> {epoch} - saving...')
     state = {
         'opt': opt,
         'model': model.state_dict(),

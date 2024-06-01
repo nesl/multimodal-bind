@@ -51,7 +51,7 @@ def collate_fn_pad(batch):
     return batched_data
 
 
-def parse_option():
+def parse_option(save_path='./save_mmbind/save_acc_autoencoder/'):
     parser = argparse.ArgumentParser('argument for training')
 
     parser.add_argument('--print_freq', type=int, default=1,
@@ -62,11 +62,11 @@ def parse_option():
                         help='batch_size')
     parser.add_argument('--num_workers', type=int, default=16,
                         help='num of workers to use')
-    parser.add_argument('--epochs', type=int, default=300,
+    parser.add_argument('--epochs', type=int, default=200,
                         help='number of training epochs')
 
     # optimization
-    parser.add_argument('--learning_rate', type=float, default=1e-3,
+    parser.add_argument('--learning_rate', type=float, default=5e-3,
                         help='learning rate')
     parser.add_argument('--momentum', type=float, default=0.9,
                         help='momentum')
@@ -103,9 +103,10 @@ def parse_option():
 
     torch.manual_seed(opt.seed)
     np.random.seed(opt.seed)
-    
+
+
     # set the path according to the environment
-    opt.save_path = "./save_dual_contrastive/save_{}_contrastive_{}/".format(opt.dataset, opt.load_pretrain)
+    opt.save_path = save_path
     opt.model_path = opt.save_path + 'models'
     opt.tb_path = opt.save_path + 'tensorboard'
     opt.result_path = opt.save_path + 'results/'
