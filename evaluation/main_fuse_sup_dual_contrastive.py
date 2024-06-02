@@ -273,18 +273,17 @@ def main():
 
         label_list = np.array(label_list)
         pred_list = np.array(pred_list)
-        np.savetxt(opt.result_path+ "confusion.txt", confusion)
-        np.savetxt(opt.result_path + "label.txt", label_list)
-        np.savetxt(opt.result_path + "pred.txt", pred_list)
-        np.savetxt(opt.result_path + "loss.txt", record_loss)
-        np.savetxt(opt.result_path + "test_accuracy.txt", record_acc)
-        np.savetxt(opt.result_path + "test_f1.txt", record_f1)
-        np.savetxt(opt.result_path + "train_accuracy.txt", record_acc_train)
+        np.savetxt(os.path.join(opt.result_folder , "confusion.txt"), confusion)
+        np.savetxt(os.path.join(opt.result_folder , "label.txt"), label_list)
+        np.savetxt(os.path.join(opt.result_folder , "pred.txt"), pred_list)
+        np.savetxt(os.path.join(opt.result_folder , "loss.txt"), record_loss)
+        np.savetxt(os.path.join(opt.result_folder , "test_accuracy.txt"), record_acc)
+        np.savetxt(os.path.join(opt.result_folder , "test_f1.txt"), record_f1)
+        np.savetxt(os.path.join(opt.result_folder , "train_accuracy.txt"), record_acc_train)
     
     # save the last model
-    # save_file = os.path.join(
-    #     opt.save_folder, 'last.pth')
-    # save_model(model, optimizer, opt, opt.epochs, save_file)
+    save_file = os.path.join(opt.save_folder, 'last.pth')
+    save_model(model, optimizer, opt, opt.epochs, save_file)
 
     # print("result of {}:".format(opt.dataset))
     print('best accuracy: {:.3f}'.format(best_acc))

@@ -93,9 +93,10 @@ def parse_evaluation_option(exp_type, exp_tag):
     
     opt.tb_folder = os.path.join(opt.tb_path, opt.model_name)
     opt.save_folder = os.path.join(opt.model_path, opt.model_name)
+    opt.result_folder = os.path.join(opt.result_path, opt.model_name)
     opt.log_folder = os.path.join(opt.save_path, "logs")
 
-    for folder in [opt.tb_folder, opt.save_folder, opt.result_path, opt.log_folder]:
+    for folder in [opt.tb_folder, opt.save_folder, opt.result_path, opt.log_folder, opt.result_folder]:
         if not os.path.isdir(folder):
             os.makedirs(folder)
         
