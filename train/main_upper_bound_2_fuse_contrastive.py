@@ -89,9 +89,9 @@ def set_model(opt):
     if opt.load_pretrain == "load_pretrain":
         print("Loading pretrained weights from step 1")
         model_template = SingleIMUAutoencoder('acc')
-        model_template.load_state_dict(torch.load('./save_upper_bound/unimodal_pretrain/save_train_AB_gyro_autoencoder/models/lr_0.0001_decay_0.0001_bsz_64/last.pth')['model'])
+        model_template.load_state_dict(torch.load('./save_upper_bound/unimodal_pretrain/save_train_AB_autoencoder_no_load_gyro/models/lr_0.0001_decay_0.0001_bsz_64/last.pth')['model'])
         model.gyro_encoder = model_template.encoder
-        model_template.load_state_dict(torch.load('./save_upper_bound/unimodal_pretrain/save_train_AB_mag_autoencoder/models/lr_0.0001_decay_0.0001_bsz_64/last.pth')['model'])
+        model_template.load_state_dict(torch.load('./save_upper_bound/unimodal_pretrain/save_train_AB_autoencoder_no_load_mag/models/lr_0.0001_decay_0.0001_bsz_64/last.pth')['model'])
         model.mag_encoder = model_template.encoder
 
        # enable synchronized Batch Normalization
@@ -152,7 +152,7 @@ def train(train_loader, model, criterion, optimizer, epoch, opt):
 
 
 def main():
-    opt = parse_option("save_upper_bound", "contrastive")
+    opt = parse_option("save_upper_bound", "fuse_contrastive")
 
     # build data loader
     train_loader = set_loader(opt)

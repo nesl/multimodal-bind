@@ -28,13 +28,6 @@ from shared_files import data_pre as data
 from models.imu_models import SingleIMUEncoder, SingleIMUAutoencoder
 
 
-try:
-    import apex
-    from apex import amp, optimizers
-except ImportError:
-    pass
-
-
 def parse_option():
     parser = argparse.ArgumentParser('argument for training')
 
@@ -98,8 +91,8 @@ def parse_option():
 def set_loader(opt):
 
     #load labeled train and test data
-    train_datasetA = data.Multimodal_dataset([], ['acc', 'gyro'], root='../../PAMAP_Dataset/trainA/')
-    train_datasetB = data.Multimodal_dataset([], ['acc', 'mag'], root='../../PAMAP_Dataset/trainB/')
+    train_datasetA = data.Multimodal_dataset([], ['acc', 'gyro'], root='../PAMAP_Dataset/trainA/')
+    train_datasetB = data.Multimodal_dataset([], ['acc', 'mag'], root='../PAMAP_Dataset/trainB/')
 
     train_loader_A = torch.utils.data.DataLoader(
         train_datasetA, batch_size=opt.batch_size,
@@ -117,7 +110,7 @@ def set_model(opt):
     #model = SupCEResNet(name=opt.model, num_classes=opt.n_cls)
     model = SingleIMUEncoder('acc')
     model_template= SingleIMUAutoencoder('acc')
-    model_template.load_state_dict(torch.load('./save_mmbind/save_acc_autoencoder/models/lr_0.005_decay_0.0001_bsz_64/last.pth')['model'])
+    model_template.load_state_dict(torch.load('./save_mmbind/save_train_AB_acc_autoencoder_no_load/models/lr_0.005_decay_0.0001_bsz_64/last.pth')['model'])
     model = model_template.encoder
     model.cuda()
     return model
@@ -148,8 +141,6 @@ def validate(val_loader, model, opt):
 
             # forward
             features = torch.reshape(model(batched_data), (bsz, -1))
-            print("features:", features.shape)
-
 
             # calculate and store confusion matrix
             features_list.extend(features.cpu().numpy())
@@ -218,7 +209,7 @@ def main():
         plt.ylabel('Skeleton feature from Dataset B')
         plt.xlabel('Skeleton feature from Dataset A')
     # plt.show()
-    # plt.savefig(save_paired_path + "similarity_matrix_{}_pair".format(opt.reference_modality))
+    plt.savefig(save_paired_path + "similarity_matrix_{}_pair".format(opt.reference_modality))
 
     paired_data_length = reference_label.shape[0]
     search_data_length = search_feature.shape[0]

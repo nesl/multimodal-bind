@@ -38,7 +38,7 @@ def parse_option(exp_type, exp_tag):
     # model dataset
     parser.add_argument('--model', type=str, default='MyUTDmodel')
     parser.add_argument('--dataset', type=str, default='train_AB',
-                        choices=['train_A', 'train_B', 'train_AB'], help='dataset')
+                        choices=['train_A', 'train_B', 'train_AB', 'train_mag_paired_AB', 'train_gyro_paired_AB', 'train_all_paired_AB'], help='dataset')
     parser.add_argument('--modality', type=str, default='gyro',
                         choices=['gyro', 'mag'], help='dataset')
     parser.add_argument('--num_class', type=int, default=27,
@@ -46,7 +46,7 @@ def parse_option(exp_type, exp_tag):
     # temperature
     parser.add_argument('--temp', type=float, default=0.07,
                         help='temperature for loss function')
-    parser.add_argument('--load_pretrain', type=str, default='no_load', help='load_pretrain')
+    # parser.add_argument('--load_pretrain', type=str, default='no_load', help='load_pretrain')
 
     # other setting
     parser.add_argument('--cosine', action='store_true',
@@ -63,13 +63,21 @@ def parse_option(exp_type, exp_tag):
 
     opt = parser.parse_args()
 
+
+    # Set load pretrain tag
+    opt.load_pretrain = "no_load"
+    if ("fuse" in exp_type and "mmbind" not in exp_type) or "fuse" in exp_tag:
+        print(f"Loading pretrain for {exp_tag}_{exp_tag}")
+        opt.load_pretrain = "load_pretrain"
+
+
     torch.manual_seed(opt.seed)
     np.random.seed(opt.seed)
 
     opt.valid_mods = ['acc', 'gyro'] if opt.dataset == 'train_A' else ['acc', 'mag'] 
 
     # set the path according to the environment
-    opt.save_path = f'./{exp_type}/save_{opt.dataset}_{exp_tag}_{opt.load_pretrain}/'
+    opt.save_path = f'./{exp_type}/save_{opt.dataset}_{exp_tag}_{opt.load_pretrain}_{opt.modality}/'
     opt.model_path = opt.save_path + 'models'
     opt.tb_path = opt.save_path + 'tensorboard'
     opt.result_path = opt.save_path + 'results/'

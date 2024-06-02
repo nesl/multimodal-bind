@@ -29,7 +29,7 @@ def parse_evaluation_option(exp_type, exp_tag):
                         help='learning rate')
     parser.add_argument('--momentum', type=float, default=0.9,
                         help='momentum')
-    parser.add_argument('--weight_decay', type=float, default=1e-4,
+    parser.add_argument('--weight_decay', type=float, default=5e-4,
                         help='weight decay')
     parser.add_argument('--lr_decay_epochs', type=str, default='350,400,450',
                         help='where to decay lr, can be a list')
