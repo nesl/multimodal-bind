@@ -21,7 +21,7 @@ from shared_files.util import adjust_learning_rate, warmup_learning_rate, accura
 from shared_files.util import set_optimizer, save_model
 from shared_files import data_pre as data
 from torch.utils.data import ConcatDataset
-from models.imu_models import SingleIMUAutoencoder, GyroMagEncoder
+from models.imu_models import ModEncoder, SingleIMUAutoencoder, GyroMagEncoder
 from shared_files.contrastive_design import FeatureConstructor, ConFusionLoss
 
 from tqdm import tqdm
@@ -82,21 +82,28 @@ def load_single_modal(opt, modality):
 
 def set_model(opt):
 
-    model = GyroMagEncoder()
+    mod = opt.common_modality
+    mod_space = ['acc', 'gyro', 'mag']
+    multi_mod_space = [[mod, m] for m in mod_space if m != mod]
+
+    opt.valid_mod = multi_mod_space
+
+    model = ModEncoder()
     criterion = ConFusionLoss(temperature=opt.temp)
 
  
     if opt.load_pretrain == "load_pretrain":
-        print("Loading pretrained weights from step 1")
-        model_template = SingleIMUAutoencoder('acc')
-        model_template.load_state_dict(torch.load('./save_upper_bound/unimodal_pretrain/save_train_AB_autoencoder_no_load_gyro/models/lr_0.0001_decay_0.0001_bsz_64/last.pth')['model'])
-        model.gyro_encoder = model_template.encoder
-        model_template.load_state_dict(torch.load('./save_upper_bound/unimodal_pretrain/save_train_AB_autoencoder_no_load_mag/models/lr_0.0001_decay_0.0001_bsz_64/last.pth')['model'])
-        model.mag_encoder = model_template.encoder
+        print("=\tLoading pretrained weights from step 1")
+        print(f"=\tLoading IMUEncoder for {mod}")
+        model_template = SingleIMUAutoencoder(mod)
 
-       # enable synchronized Batch Normalization
-    # if opt.syncBN:
-        # model = apex.parallel.convert_syncbn_model(model)
+        mod1 = opt.valid_mod[0][1]
+        mod2 = opt.valid_mod[1][1]
+        model_template.load_state_dict(torch.load(f'./save_upper_bound/unimodal_pretrain/save_train_AB_autoencoder_no_load_{mod1}/models/lr_0.0001_decay_0.0001_bsz_64/last.pth')['model'])
+        setattr(model, f"{mod1}_encoder", model_template.encoder)
+
+        model_template.load_state_dict(torch.load(f'./save_upper_bound/unimodal_pretrain/save_train_AB_autoencoder_no_load_{mod2}/models/lr_0.0001_decay_0.0001_bsz_64/last.pth')['model'])
+        setattr(model, f"{mod2}_encoder", model_template.encoder)
 
     if torch.cuda.is_available():
         # if torch.cuda.device_count() > 1:
@@ -122,9 +129,18 @@ def train(train_loader, model, criterion, optimizer, epoch, opt):
     for idx, batched_data in enumerate(train_loader):
         data_time.update(time.time() - end)
 
-        gyro_embed, mag_embed = model(batched_data)
+        acc_embed, gyro_embed, mag_embed = model(batched_data)
+        embed = {
+            "acc": acc_embed,
+            "gyro": gyro_embed,
+            "mag": mag_embed
+        }
+
         bsz = gyro_embed.shape[0]
-        features = FeatureConstructor(gyro_embed, mag_embed, 2)
+
+        embed1 = embed[opt.valid_mod[0][1]]
+        embed2 = embed[opt.valid_mod[1][1]]
+        features = FeatureConstructor(embed1, embed2, 2)
 
         loss = criterion(features)
         losses.update(loss.item(), bsz)
@@ -137,16 +153,6 @@ def train(train_loader, model, criterion, optimizer, epoch, opt):
         # measure elapsed time
         batch_time.update(time.time() - end)
         end = time.time()
-
-        # print info
-        # if (idx + 1) % opt.print_freq == 0:
-        #     print('Train: [{0}][{1}/{2}]\t'
-        #           'BT {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
-        #           'DT {data_time.val:.3f} ({data_time.avg:.3f})\t'
-        #           'loss {loss.val:.3f} ({loss.avg:.3f})\t'.format(
-        #            epoch, idx + 1, len(train_loader), batch_time=batch_time,
-        #            data_time=data_time, loss=losses))
-        #     sys.stdout.flush()
 
     return losses.avg
 

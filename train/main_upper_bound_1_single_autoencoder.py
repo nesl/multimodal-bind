@@ -50,11 +50,8 @@ def set_loader(opt):
 
 
 def set_model(opt):
-    print("Training with modality ", opt.modality)
-    model = SingleIMUAutoencoder(opt.modality)
-    # enable synchronized Batch Normalization
-    # if opt.syncBN:
-        # model = apex.parallel.convert_syncbn_model(model)
+    print(f"=\tTraining with modality ", opt.common_modality)
+    model = SingleIMUAutoencoder(opt.common_modality)
 
     if torch.cuda.is_available():
         # if torch.cuda.device_count() > 1:

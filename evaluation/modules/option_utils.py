@@ -64,6 +64,10 @@ def parse_evaluation_option(exp_type, exp_tag):
     opt.save_path = f'./save_{opt.dataset}{exp_tag}/'
     if "sup_mmbind" in exp_tag:
         opt.save_path = f'./save_{opt.dataset}{exp_tag}_{opt.common_modality}/'
+    
+    print(f"=\tSaving models to path {opt.save_path}")
+    print(f"=\tLearning rate: {opt.learning_rate}")
+    print(f"=\tWeight decay: {opt.weight_decay}")
     opt.model_path = opt.save_path + 'models'
     opt.tb_path = opt.save_path + 'tensorboard'.format(opt.dataset)
     opt.result_path = opt.save_path + 'results/'.format(opt.dataset)

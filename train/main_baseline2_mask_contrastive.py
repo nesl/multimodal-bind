@@ -30,14 +30,6 @@ from modules.print_utils import pprint
 from models.imu_models import FullIMUEncoder, SingleIMUAutoencoder
 
 
-
-try:
-    import apex
-    from apex import amp, optimizers
-except ImportError:
-    pass
-
-
 def collate_fn_pad(batch):
     for i in range(len(batch)):
         if ('gyro' not in batch[i]['valid_mods']):
@@ -57,19 +49,24 @@ def collate_fn_pad(batch):
 
 def set_loader(opt):
 
+    mod = opt.common_modality
+    mod_space = ['acc', 'gyro', 'mag']
+    multi_mod_space = [[mod, m] for m in mod_space if m != mod]
+
+    opt.valid_mod = multi_mod_space
+
     #load labeled train and test data
-    print("train data:")
     if opt.dataset == "train_AB":
-        print("Training with dataset AB")
-        train_datasetA = data.Multimodal_dataset([], ['acc', 'gyro'], root='../PAMAP_Dataset/trainA/')
-        train_datasetB = data.Multimodal_dataset([], ['acc', 'mag'],  root='../PAMAP_Dataset/trainB/')
+        print("=\tTraining with dataset AB")
+        train_datasetA = data.Multimodal_dataset([], opt.valid_mod[0], root='../PAMAP_Dataset/trainA/')
+        train_datasetB = data.Multimodal_dataset([], opt.valid_mod[1],  root='../PAMAP_Dataset/trainB/')
         train_dataset = ConcatDataset([train_datasetA, train_datasetB])
     elif opt.dataset == "train_A":
-        print("Training with dataset A only. Are you sure??")
-        train_dataset = data.Multimodal_dataset([], ['acc', 'gyro'], root='../PAMAP_Dataset/trainA/')
+        print(f"=\tTraining with dataset A and valid mod {opt.valid_mod[0]}")
+        train_dataset = data.Multimodal_dataset([], opt.valid_mod[0], root='../PAMAP_Dataset/trainA/')
     elif opt.dataset == "train_B":
-        print("Training with dataset B only. Are you sure??")
-        train_dataset = data.Multimodal_dataset([], ['acc', 'gyro'], root='../PAMAP_Dataset/trainB/')
+        print(f"=\tTraining with dataset B and valid mod {opt.valid_mod[1]}")
+        train_dataset = data.Multimodal_dataset([], opt.valid_mod[1], root='../PAMAP_Dataset/trainB/')
     else:
         raise Exception("Invalid dataset selection")
     
@@ -108,12 +105,12 @@ def set_model(opt):
         model.acc_encoder = model_template.encoder
     
     # enable synchronized Batch Normalization
-    if opt.syncBN:
-        model = apex.parallel.convert_syncbn_model(model)
+    # if opt.syncBN:
+        # model = apex.parallel.convert_syncbn_model(model)
 
     if torch.cuda.is_available():
-        if torch.cuda.device_count() > 1:
-            model = torch.nn.DataParallel(model)
+        # if torch.cuda.device_count() > 1:
+            # model = torch.nn.DataParallel(model)
         model = model.cuda()
         criterion = criterion.cuda()
         cudnn.benchmark = True

@@ -29,12 +29,20 @@ from models.imu_models import SingleIMUAutoencoder
 
 
 def set_loader(opt):
+    mod = opt.common_modality
+    mod_space = ['acc', 'gyro', 'mag']
+    multi_mod_space = [[mod, m] for m in mod_space if m != mod]
+
+    opt.valid_mod = multi_mod_space
+
     if opt.dataset == "train_A":
-        print("=\tTraining GYRO on dataset A")
-        train_dataset = data.Multimodal_dataset([], ['acc', 'gyro'], root='../PAMAP_Dataset/trainA/')
+        print(f"=\tTraining {opt.valid_mod[0]} on dataset A")
+        opt.other_mod = opt.valid_mod[0][1]
+        train_dataset = data.Multimodal_dataset([], opt.valid_mod[0], root='../PAMAP_Dataset/trainA/')
     else:
-        print("=\tTraining MAG on dataset B")
-        train_dataset = data.Multimodal_dataset([], ['acc', 'mag'], root='../PAMAP_Dataset/trainB/')
+        print(f"=\tTraining {opt.valid_mod[1]} on dataset B")
+        opt.other_mod = opt.valid_mod[1][1]
+        train_dataset = data.Multimodal_dataset([], opt.valid_mod[1], root='../PAMAP_Dataset/trainB/')
 
     train_loader = torch.utils.data.DataLoader(
         train_dataset, batch_size=opt.batch_size,
@@ -44,8 +52,8 @@ def set_loader(opt):
 
 
 def set_model(opt):
-
-    model = SingleIMUAutoencoder(opt.valid_mods[1]) # Either gyro or mag
+    print(f"=\tInitializing Autoencoder for mod {opt.other_mod}")
+    model = SingleIMUAutoencoder(opt.other_mod) # Either gyro or mag
 
     # enable synchronized Batch Normalization
     # if opt.syncBN:
@@ -85,7 +93,8 @@ def train(train_loader, model, optimizer, epoch, opt):
 
         output = model(batched_data)
         output = torch.reshape(output, (bsz, -1, 3))
-        loss = F.mse_loss(batched_data[opt.valid_mods[1]].cuda(), output)
+
+        loss = F.mse_loss(batched_data[opt.other_mod].cuda(), output)
 
         # update metric
         losses.update(loss.item(), bsz)
