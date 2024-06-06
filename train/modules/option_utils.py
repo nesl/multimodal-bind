@@ -59,7 +59,11 @@ def parse_option(exp_type, exp_tag):
                         help='id for recording multiple runs')
     parser.add_argument('--seed', type=int, default=100)
 
+    # gpu setting (tommy)
     parser.add_argument('--gpu', type=int, default=-1)
+
+    # modality setting
+    parser.add_argument('--common_modality', type=str, default="acc")
 
     opt = parser.parse_args()
 
@@ -74,10 +78,15 @@ def parse_option(exp_type, exp_tag):
     torch.manual_seed(opt.seed)
     np.random.seed(opt.seed)
 
-    opt.valid_mods = ['acc', 'gyro'] if opt.dataset == 'train_A' else ['acc', 'mag'] 
+
+    # @TODO: Need to modify
+    opt.valid_mods = ['acc', 'gyro'] if opt.dataset == 'train_A' else ['acc', 'mag']
 
     # set the path according to the environment
-    opt.save_path = f'./{exp_type}/save_{opt.dataset}_{exp_tag}_{opt.load_pretrain}_{opt.modality}/'
+    if "save_mmbind" in exp_type and ("unimod_autoencoder" in exp_tag or "contrastive" in exp_tag):
+        opt.save_path = f'./{exp_type}/save_{opt.dataset}_{exp_tag}_{opt.load_pretrain}_{opt.common_modality}/'
+    else:
+        opt.save_path = f'./{exp_type}/save_{opt.dataset}_{exp_tag}_{opt.load_pretrain}_{opt.modality}/'
     opt.model_path = opt.save_path + 'models'
     opt.tb_path = opt.save_path + 'tensorboard'
     opt.result_path = opt.save_path + 'results/'

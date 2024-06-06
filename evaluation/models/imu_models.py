@@ -155,6 +155,53 @@ class GyroMagEncoder(nn.Module):
 
         return nn.functional.normalize(gyro_embed), nn.functional.normalize(mag_embed)
 
+class ModEncoder(nn.Module):
+    def __init__(self):
+        super(ModEncoder, self).__init__()
+        self.acc_encoder = SingleIMUEncoder('acc')
+        self.gyro_encoder = SingleIMUEncoder('gyro')
+        self.mag_encoder = SingleIMUEncoder('mag')
+
+        self.acc_adapter= nn.Sequential(
+
+            nn.Linear(1920, 1280),
+            nn.BatchNorm1d(1280),
+            nn.ReLU(inplace=True),
+
+            nn.Linear(1280, 128),            
+            )
+        
+        self.gyro_adapter= nn.Sequential(
+
+            nn.Linear(1920, 1280),
+            nn.BatchNorm1d(1280),
+            nn.ReLU(inplace=True),
+
+            nn.Linear(1280, 128),            
+            )
+
+        self.mag_adapter = nn.Sequential(
+
+            nn.Linear(1920, 1280),
+            nn.BatchNorm1d(1280),
+            nn.ReLU(inplace=True),
+
+            nn.Linear(1280, 128),            
+            )
+
+    def forward(self, batched_data):
+        acc_embed = self.acc_encoder(batched_data)
+        gyro_embed = self.gyro_encoder(batched_data)
+        mag_embed = self.mag_encoder(batched_data)
+        
+        batch_size = gyro_embed.shape[0]
+
+        acc_embed = self.acc_adapter(torch.reshape(acc_embed, (batch_size, -1)))
+        gyro_embed = self.gyro_adapter(torch.reshape(gyro_embed, (batch_size, -1)))
+        mag_embed = self.mag_adapter(torch.reshape(mag_embed, (batch_size, -1)))
+
+        return nn.functional.normalize(acc_embed), nn.functional.normalize(gyro_embed), nn.functional.normalize(mag_embed)
+    
 class SupervisedGyroMag(nn.Module):
     def __init__(self):
         super(SupervisedGyroMag, self).__init__()
@@ -175,6 +222,52 @@ class SupervisedGyroMag(nn.Module):
         mag_embed = torch.reshape(mag_embed, (b_size, -1))
         
         combined = torch.cat((gyro_embed, mag_embed), dim=-1)
+        return self.output_head(combined)
+
+class SupervisedAccGyro(nn.Module):
+    def __init__(self):
+        super(SupervisedAccGyro, self).__init__()
+        self.gyro_encoder = SingleIMUEncoder('gyro')
+        self.acc_encoder = SingleIMUEncoder('acc')
+        self.output_head = nn.Sequential(
+            nn.Linear(1920 * 2, 1920),
+            nn.ReLU(),
+            nn.Linear(1920, 7)
+        )
+    def forward(self, data):
+        
+        gyro_embed = self.gyro_encoder(data)
+        acc_embed = self.acc_encoder(data)
+        
+        b_size = gyro_embed.shape[0]
+        
+        gyro_embed = torch.reshape(gyro_embed, (b_size, -1))
+        acc_embed = torch.reshape(acc_embed, (b_size, -1))
+        
+        combined = torch.cat((gyro_embed, acc_embed), dim=-1)
+        return self.output_head(combined)
+
+class SupervisedAccMag(nn.Module):
+    def __init__(self):
+        super(SupervisedAccMag, self).__init__()
+        self.mag_encoder = SingleIMUEncoder('mag')
+        self.acc_encoder = SingleIMUEncoder('acc')
+        self.output_head = nn.Sequential(
+            nn.Linear(1920 * 2, 1920),
+            nn.ReLU(),
+            nn.Linear(1920, 7)
+        )
+    def forward(self, data):
+        
+        mag_embed = self.mag_encoder(data)
+        acc_embed = self.acc_encoder(data)
+        
+        b_size = mag_embed.shape[0]
+        
+        mag_embed = torch.reshape(mag_embed, (b_size, -1))
+        acc_embed = torch.reshape(acc_embed, (b_size, -1))
+        
+        combined = torch.cat((mag_embed, acc_embed), dim=-1)
         return self.output_head(combined)
 
 

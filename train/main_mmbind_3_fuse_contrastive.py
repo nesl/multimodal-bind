@@ -15,7 +15,7 @@ from shared_files.util import adjust_learning_rate
 from shared_files.util import set_optimizer, save_model
 from shared_files import data_pre as data
 
-from models.imu_models import GyroMagEncoder, SingleIMUAutoencoder
+from models.imu_models import GyroMagEncoder, SingleIMUAutoencoder, ModEncoder
 from shared_files.contrastive_design import FeatureConstructor, ConFusionLoss
 
 from tqdm import tqdm
@@ -25,8 +25,11 @@ from modules.print_utils import pprint
 
 def set_loader(opt):
     print(f"=\tInitializing Dataloader")
-    #load labeled train and test data    
-    train_dataset = data.Multimodal_dataset([], ['acc', 'gyro', 'mag'], root='./save_mmbind/' + opt.dataset + '/')
+    #load labeled train and test data
+
+    dataset = f"./save_mmbind/train_all_paired_AB_{opt.common_modality}/"
+    print(f"=\tLoading dataset from {dataset}")
+    train_dataset = data.Multimodal_dataset([], ['acc', 'gyro', 'mag'], root=dataset)
 
     train_loader = torch.utils.data.DataLoader(
         train_dataset, batch_size=opt.batch_size,
@@ -37,9 +40,13 @@ def set_loader(opt):
 
 
 def set_model(opt):
-    print(f"Initializing Backbone models")
-    model = GyroMagEncoder()
+    print(f"=\tInitializing Backbone models")
+    # model = GyroMagEncoder()
+    model = ModEncoder()
     criterion = ConFusionLoss(temperature=opt.temp)
+
+    common_modality = opt.common_modality
+    other_modalities = [m for m in ['acc', 'gyro', 'mag'] if m != common_modality]
 
  
     if opt.load_pretrain == "load_pretrain":
@@ -74,14 +81,27 @@ def train(train_loader, model, criterion, optimizer, epoch, opt):
 
     end = time.time()
 
+    common_modality = opt.common_modality
+    other_modalities = [m for m in ['acc', 'gyro', 'mag'] if m != common_modality]
+
     for idx, batched_data in enumerate(train_loader):
         data_time.update(time.time() - end)
 
       
 
-        gyro_embed, mag_embed = model(batched_data)
+        acc_embed, gyro_embed, mag_embed = model(batched_data)
+
+        embed = {
+            "acc": acc_embed,
+            "gyro": gyro_embed,
+            "mag": mag_embed
+        }
+
         bsz = gyro_embed.shape[0]
-        features = FeatureConstructor(gyro_embed, mag_embed, 2)
+
+        embed1 = embed[other_modalities[0]]
+        embed2 = embed[other_modalities[1]]
+        features = FeatureConstructor(embed1, embed2, 2)
 
         loss = criterion(features)
         losses.update(loss.item(), bsz)

@@ -54,6 +54,7 @@ def parse_evaluation_option(exp_type, exp_tag):
                         help='id for recording multiple runs')
     parser.add_argument('--seed', type=int, default=100)
     parser.add_argument('--gpu', type=int, default=-1)
+    parser.add_argument('--common_modality', type=str, default="acc")
     opt = parser.parse_args()
 
     torch.manual_seed(opt.seed)
@@ -61,6 +62,8 @@ def parse_evaluation_option(exp_type, exp_tag):
 
     # set the path according to the environment
     opt.save_path = f'./save_{opt.dataset}{exp_tag}/'
+    if "sup_mmbind" in exp_tag:
+        opt.save_path = f'./save_{opt.dataset}{exp_tag}_{opt.common_modality}/'
     opt.model_path = opt.save_path + 'models'
     opt.tb_path = opt.save_path + 'tensorboard'.format(opt.dataset)
     opt.result_path = opt.save_path + 'results/'.format(opt.dataset)

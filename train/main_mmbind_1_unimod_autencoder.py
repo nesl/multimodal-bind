@@ -30,16 +30,21 @@ from modules.print_utils import pprint
 
 
 def set_loader(opt):
+
+    common_modality = opt.common_modality
+
+    print(f"=\tLoading dataloader for common modality {common_modality}")
+
     if opt.dataset == "train_A":
-        print("Training dataset A")
-        train_dataset = data.Multimodal_dataset([], ['acc'], root='../PAMAP_Dataset/trainA/')
+        print("=\tTraining dataset A")
+        train_dataset = data.Multimodal_dataset([], [common_modality], root='../PAMAP_Dataset/trainA/')
     elif opt.dataset == 'train_B':
-        print("Training dataset B")
-        train_dataset = data.Multimodal_dataset([], ['acc'], root='../PAMAP_Dataset/trainB/')
+        print("=\tTraining dataset B")
+        train_dataset = data.Multimodal_dataset([], [common_modality], root='../PAMAP_Dataset/trainB/')
     elif opt.dataset == 'train_AB':
-        print("Training dataset A and B")
-        train_datasetA = data.Multimodal_dataset([], ['acc'], root='../PAMAP_Dataset/trainA/')
-        train_datasetB = data.Multimodal_dataset([], ['acc'], root='../PAMAP_Dataset/trainB/')
+        print("=\tTraining Concat Dataset from dataset A and B")
+        train_datasetA = data.Multimodal_dataset([], [common_modality], root='../PAMAP_Dataset/trainA/')
+        train_datasetB = data.Multimodal_dataset([], [common_modality], root='../PAMAP_Dataset/trainB/')
         train_dataset = ConcatDataset([train_datasetA, train_datasetB])
     else:
         raise Exception("invalid dataset")
@@ -56,10 +61,6 @@ def set_model(opt):
     mod = opt.common_modality
     print(f"=\tLoading Autoencoder for modality {mod}")
     model = SingleIMUAutoencoder(mod) 
-
-    # enable synchronized Batch Normalization
-    # if opt.syncBN:
-        # model = apex.parallel.convert_syncbn_model(model)
 
     if torch.cuda.is_available():
         # if torch.cuda.device_count() > 1:
@@ -95,7 +96,7 @@ def train(train_loader, model, optimizer, epoch, opt):
 
         output = model(batched_data)
         output = torch.reshape(output, (bsz, -1, 3))
-        loss = F.mse_loss(batched_data['acc'].cuda(), output)
+        loss = F.mse_loss(batched_data[opt.common_modality].cuda(), output)
 
         # update metric
         losses.update(loss.item(), bsz)
@@ -109,23 +110,12 @@ def train(train_loader, model, optimizer, epoch, opt):
         batch_time.update(time.time() - end)
         end = time.time()
 
-        # print info
-        # if (idx + 1) % opt.print_freq == 0:
-        #     print('Train: [{0}][{1}/{2}]\t'
-        #           'BT {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
-        #           'DT {data_time.val:.3f} ({data_time.avg:.3f})\t'
-        #           'loss {loss.val:.3f} ({loss.avg:.3f})\t'.format(
-        #            epoch, idx + 1, len(train_loader), batch_time=batch_time,
-        #            data_time=data_time, loss=losses))
-        #     sys.stdout.flush()
-
-    # print(output[0][0])
     return losses.avg
 
 
 def main():
 
-    opt = parse_option("save_mmbind", "acc_autoencoder")
+    opt = parse_option("save_mmbind", "unimod_autoencoder")
 
     # build data loader
     train_loader = set_loader(opt)

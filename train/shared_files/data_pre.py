@@ -26,7 +26,9 @@ class Multimodal_dataset():
 		self.valid_mods = valid_mods
 		self.file_names = []
 		for file in sorted(os.listdir(root)):
-			self.data_arr.append(np.load(root + file))
+			if file[-4:] != ".npy":
+				continue
+			self.data_arr.append(np.load(root + file, allow_pickle=True))
 			self.labels.append(int(file.split('_')[0]))
 			self.file_names.append(os.path.abspath(root + file))
 		self.data_arr = np.array(self.data_arr)

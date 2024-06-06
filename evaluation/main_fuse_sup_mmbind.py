@@ -22,7 +22,7 @@ from shared_files.util import adjust_learning_rate, warmup_learning_rate, accura
 from shared_files.util import set_optimizer, save_model
 from shared_files import data_pre as data
 
-from models.imu_models import GyroMagEncoder, SupervisedGyroMag
+from models.imu_models import GyroMagEncoder, SupervisedAccGyro, SupervisedAccMag, SupervisedGyroMag, ModEncoder
 
 from tqdm import tqdm
 from modules.option_utils import parse_evaluation_option
@@ -47,11 +47,31 @@ def set_loader(opt):
 
 def set_model(opt):
 
-    model = SupervisedGyroMag()
-    model_template = GyroMagEncoder()
-    model_template.load_state_dict(torch.load('../train/save_mmbind/save_train_all_paired_AB_contrastive_no_load_gyro/models/lr_0.0001_decay_0.0001_bsz_64/last.pth')['model'])
+    model_template = ModEncoder()
+
+    common_acc_weight = "../train/save_mmbind/save_train_AB_contrastive_no_load_acc/models/lr_0.0001_decay_0.0001_bsz_64/last.pth"
+    common_gyro_weight = "../train/save_mmbind/save_train_AB_contrastive_no_load_gyro/models/lr_0.0001_decay_0.0001_bsz_64/last.pth"
+    common_mag_weight = "../train/save_mmbind/save_train_AB_contrastive_no_load_mag/models/lr_0.0001_decay_0.0001_bsz_64/last.pth"
+
+    if opt.common_modality == 'acc':
+        weight = common_acc_weight
+        model = SupervisedGyroMag()
+    elif opt.common_modality == 'gyro':
+        weight = common_gyro_weight
+        model = SupervisedAccMag()
+    elif opt.common_modality == 'mag':
+        weight = common_mag_weight
+        model = SupervisedAccGyro()
+    else:
+        raise Exception("Error")
+    
+    print(f"=\tLoading {opt.common_modality} weight from {weight}")
+
+    model_template.load_state_dict(torch.load(weight)['model'])
+
     model.gyro_encoder = model_template.gyro_encoder
     model.mag_encoder = model_template.mag_encoder
+    model.acc_encoder = model_template.acc_encoder
     criterion = torch.nn.CrossEntropyLoss()
 
     # enable synchronized Batch Normalization

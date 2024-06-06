@@ -32,10 +32,10 @@ class SingleIMUEncoder(nn.Module):
 
     def forward(self, data):
         self.GRU.flatten_parameters()
-        acc_data = data[self.modality].cuda()
-        batch_size = acc_data.shape[0]
-        acc_data = torch.unsqueeze(acc_data, dim=1) # Add 1 channel
-        embedding = torch.reshape(self.conv_layers(acc_data), (batch_size, 16, -1))
+        unimod_data = data[self.modality].cuda()
+        batch_size = unimod_data.shape[0]
+        unimod_data = torch.unsqueeze(unimod_data, dim=1) # Add 1 channel
+        embedding = torch.reshape(self.conv_layers(unimod_data), (batch_size, 16, -1))
         embedding = self.GRU(embedding)[0]
         return embedding # batch_size x 16 * 120
     
@@ -154,6 +154,53 @@ class GyroMagEncoder(nn.Module):
         mag_embed = self.mag_adapter(torch.reshape(mag_embed, (batch_size, -1)))
 
         return nn.functional.normalize(gyro_embed), nn.functional.normalize(mag_embed)
+
+class ModEncoder(nn.Module):
+    def __init__(self):
+        super(ModEncoder, self).__init__()
+        self.acc_encoder = SingleIMUEncoder('acc')
+        self.gyro_encoder = SingleIMUEncoder('gyro')
+        self.mag_encoder = SingleIMUEncoder('mag')
+
+        self.acc_adapter= nn.Sequential(
+
+            nn.Linear(1920, 1280),
+            nn.BatchNorm1d(1280),
+            nn.ReLU(inplace=True),
+
+            nn.Linear(1280, 128),            
+            )
+        
+        self.gyro_adapter= nn.Sequential(
+
+            nn.Linear(1920, 1280),
+            nn.BatchNorm1d(1280),
+            nn.ReLU(inplace=True),
+
+            nn.Linear(1280, 128),            
+            )
+
+        self.mag_adapter = nn.Sequential(
+
+            nn.Linear(1920, 1280),
+            nn.BatchNorm1d(1280),
+            nn.ReLU(inplace=True),
+
+            nn.Linear(1280, 128),            
+            )
+
+    def forward(self, batched_data):
+        acc_embed = self.acc_encoder(batched_data)
+        gyro_embed = self.gyro_encoder(batched_data)
+        mag_embed = self.mag_encoder(batched_data)
+        
+        batch_size = gyro_embed.shape[0]
+
+        acc_embed = self.acc_adapter(torch.reshape(acc_embed, (batch_size, -1)))
+        gyro_embed = self.gyro_adapter(torch.reshape(gyro_embed, (batch_size, -1)))
+        mag_embed = self.mag_adapter(torch.reshape(mag_embed, (batch_size, -1)))
+
+        return nn.functional.normalize(acc_embed), nn.functional.normalize(gyro_embed), nn.functional.normalize(mag_embed)
 
 class SupervisedGyroMag(nn.Module):
     def __init__(self):

@@ -62,8 +62,8 @@ def parse_option():
     # model dataset
     parser.add_argument('--model', type=str, default='MyUTDmodel')
     parser.add_argument('--data_folder', type=str, default='../../UTD-split-0507/UTD-split-0507-222-1/', help='data_folder')
-    parser.add_argument('--reference_modality', type=str, default='gyro',
-                        choices=['gyro', 'mag'], help='modality')
+    parser.add_argument('--reference_modality', type=str, default='setA',
+                        choices=['gyro', 'mag', 'setA', 'setB'], help='modality')
     parser.add_argument('--pair_metric', type=str, default='model_pretrain_AE', help='pair_metric')
     parser.add_argument('--num_class', type=int, default=27,
                         help='num_class')
@@ -81,6 +81,9 @@ def parse_option():
     parser.add_argument('--ckpt', type=str, default='./save_mmbind/save_train_AB_skeleton_AE/models/single_train_AB_lr_0.0001_decay_0.0001_bsz_64/',
                         help='path to pre-trained model')
     parser.add_argument('--seed', type=int, default=100)
+
+    parser.add_argument('--common_modality', type=str, default="acc")
+
     opt = parser.parse_args()
     torch.manual_seed(opt.seed)
     np.random.seed(opt.seed)
@@ -90,9 +93,17 @@ def parse_option():
 
 def set_loader(opt):
 
+    mod = opt.common_modality
+    mod_space = ['acc', 'gyro', 'mag']
+    multi_mod_space = [[mod, m] for m in mod_space if m != mod]
+
+    opt.valid_mod = multi_mod_space
+
     #load labeled train and test data
-    train_datasetA = data.Multimodal_dataset([], ['acc', 'gyro'], root='../PAMAP_Dataset/trainA/')
-    train_datasetB = data.Multimodal_dataset([], ['acc', 'mag'], root='../PAMAP_Dataset/trainB/')
+    print(f"=\tInitializing Dataset A for mod {multi_mod_space[0]}")
+    train_datasetA = data.Multimodal_dataset([], multi_mod_space[0], root='../PAMAP_Dataset/trainA/')
+    print(f"=\tInitializing Dataset B for mod {multi_mod_space[1]}")
+    train_datasetB = data.Multimodal_dataset([], multi_mod_space[1], root='../PAMAP_Dataset/trainB/')
 
     train_loader_A = torch.utils.data.DataLoader(
         train_datasetA, batch_size=opt.batch_size,
@@ -107,10 +118,21 @@ def set_loader(opt):
 
 
 def set_model(opt):
-    #model = SupCEResNet(name=opt.model, num_classes=opt.n_cls)
-    model = SingleIMUEncoder('acc')
-    model_template= SingleIMUAutoencoder('acc')
-    model_template.load_state_dict(torch.load('./save_mmbind/save_train_AB_acc_autoencoder_no_load/models/lr_0.005_decay_0.0001_bsz_64/last.pth')['model'])
+
+    mod = opt.common_modality
+    print(f"=\tLoading Autoencoder for modality {mod}")
+    model = SingleIMUEncoder(mod)
+    model_template= SingleIMUAutoencoder(mod)
+
+    if mod == "acc":
+        weight = "./save_mmbind/save_train_AB_acc_autoencoder_no_load/models/lr_0.005_decay_0.0001_bsz_64"
+    elif mod == "gyro":
+        weight = "./save_mmbind/save_train_AB_unimod_autoencoder_no_load_gyro/models/lr_0.0001_decay_0.0001_bsz_64"
+    elif mod == "mag":
+        weight = "./save_mmbind/save_train_AB_unimod_autoencoder_no_load_mag/models/lr_0.0001_decay_0.0001_bsz_64"
+    else:
+        raise Exception(f"Invalid modality {mod}")
+    model_template.load_state_dict(torch.load(os.path.join(weight, "last.pth"))['model'])
     model = model_template.encoder
     model.cuda()
     return model
@@ -152,12 +174,6 @@ def validate(val_loader, model, opt):
             batch_time.update(time.time() - end)
             end = time.time()
 
-
-            if idx % opt.print_freq == 0:
-                print('Test: [{0}/{1}]\t'
-                      'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'.format(
-                       idx, len(val_loader), batch_time=batch_time))
-
     features_list = np.array(features_list)
     idx_list = np.array(idx_list)
     label_list = np.array(label_list)
@@ -173,25 +189,40 @@ def main():
     train_loader_A, train_loader_B = set_loader(opt)
 
     # build model and criterion
-    model = set_model(opt)
+    model = set_model(opt) # 
 
-    features_A, label_A, paths_A = validate(train_loader_A, model, opt)
-    features_B, label_B, paths_B = validate(train_loader_B, model, opt)
+    features_A, label_A, paths_A = validate(train_loader_A, model, opt) # get features of X_c from D1
+    features_B, label_B, paths_B = validate(train_loader_B, model, opt) # get features of X_c from D2
+
+    mod_A = opt.valid_mod[0][1]
+    mod_B = opt.valid_mod[1][1]
+
+    print(f"=\tDataset A has mod: {mod_A}")
+    print(f"=\tDataset B has mod: {mod_B}")
+
+    print(f"=\tCommon Modality: {opt.common_modality}")
+    print(f"=\tReference set: {opt.reference_modality}")
     
-    if opt.reference_modality == "gyro":
+    if opt.reference_modality == "setA":
         ## dataset A as reference
         reference_feature = features_A
         reference_label = label_A
+        reference_path = paths_A
+
         search_feature = features_B
         search_label = label_B
+        search_path = paths_B
     else:
         ## dataset B as reference
         reference_feature = features_B
         reference_label = label_B
+        reference_path = paths_B
+
         search_feature = features_A
         search_label = label_A
+        search_path = paths_A
 
-    save_paired_path = "./save_mmbind/train_{}_paired_AB/".format(opt.reference_modality)
+    save_paired_path = f"./save_mmbind/train_{opt.reference_modality}_paired_AB_{opt.common_modality}/"
 
     if not os.path.isdir(save_paired_path):
         os.makedirs(save_paired_path)
@@ -202,14 +233,15 @@ def main():
     plt.imshow(similarity_matrix, cmap='viridis', interpolation='nearest')
     plt.colorbar()
     plt.title('Cosine Similarity Matrix - {}'.format(opt.pair_metric))
-    if opt.reference_modality == "gyro":
-        plt.ylabel('Skeleton feature from Dataset A')
-        plt.xlabel('Skeleton feature from Dataset B')
+
+    if opt.reference_modality == "setA":
+        plt.ylabel(f'{opt.common_modality} feature from Dataset A')
+        plt.xlabel(f'{opt.common_modality} feature from Dataset B')
     else:
-        plt.ylabel('Skeleton feature from Dataset B')
-        plt.xlabel('Skeleton feature from Dataset A')
+        plt.ylabel(f'{opt.common_modality} feature from Dataset B')
+        plt.xlabel(f'{opt.common_modality} feature from Dataset A')
     # plt.show()
-    plt.savefig(save_paired_path + "similarity_matrix_{}_pair".format(opt.reference_modality))
+    plt.savefig(save_paired_path + f"similarity_matrix_{opt.reference_modality}_pair_{opt.common_modality}.png")
 
     paired_data_length = reference_label.shape[0]
     search_data_length = search_feature.shape[0]
@@ -237,18 +269,18 @@ def main():
 
         print(reference_label[sample_index], search_label[select_feature_index], select_feature_index, np.max(temp_similarity_vector), temp_correct)
 
-        if opt.reference_modality == "gyro":
-            ## dataset A as reference
-            reference_data = np.load(paths_A[sample_index])
-            select_data = np.load(paths_B[select_feature_index])
-            reference_data[:, 13:15 + 1] = select_data[:, 13:15 + 1] 
-            np.save(save_paired_path + '/' +  str(label_mapper[label_A[sample_index]]) + '_gyro_' + str(file_counter) + '.npy', reference_data)
-        else:
-            ## dataset B as reference
-            reference_data = np.load(paths_B[sample_index])
-            select_data = np.load(paths_A[select_feature_index])
-            reference_data[:, 10:12 + 1] = select_data[:, 10:12 + 1]
-            np.save(save_paired_path + '/' +  str(label_mapper[label_B[sample_index]]) + '_mag_' + str(file_counter) + '.npy', reference_data)
+        index = {
+            "acc": 10,
+            "gyro": 13,
+            "mag": 15,
+        }
+        reference_data = np.load(reference_path[sample_index])
+        select_data = np.load(search_path[select_feature_index])
+
+        index_begin = index[mod_A] if opt.reference_modality == "setA" else index[mod_B]
+        reference_data[:, index_begin:index_begin+3] = select_data[:, index_begin:index_begin+3] 
+        np.save(save_paired_path + '/' +  str(label_mapper[label_A[sample_index]]) + f'_{opt.reference_modality}_' + str(file_counter) + '.npy', reference_data)
+
         file_counter += 1
 
     # np.save(save_paired_path + 'similarity.npy', similarity_record)
@@ -259,15 +291,15 @@ def main():
 
     disp = ConfusionMatrixDisplay.from_predictions(reference_label, select_label)
     disp.plot() 
-    if opt.reference_modality == "gyro":
-        disp.ax_.set_title("Pair Dataset A and B using gyro features")
+    if opt.reference_modality == "setA":
+        disp.ax_.set_title(f"Pair Dataset A and B using {mod_A} features")
         disp.ax_.set_ylabel('Label for Dataset A')
         disp.ax_.set_xlabel('Selected Label from Dataset B')
     else:
-        disp.ax_.set_title("Pair Dataset B and A using mag features")
+        disp.ax_.set_title(f"Pair Dataset B and A using {mod_B} features")
         disp.ax_.set_ylabel('Label for Dataset B')
         disp.ax_.set_xlabel('Selected Label from Dataset A')
-    # plt.savefig(save_paired_path + "results_{}_pair".format(opt.reference_modality))
+    plt.savefig(save_paired_path + f"results_{opt.reference_modality}_pair_{opt.common_modality}.png")
 
 
 

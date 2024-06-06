@@ -185,14 +185,6 @@ def validate(val_loader, model, criterion, opt):
             batch_time.update(time.time() - end)
             end = time.time()
 
-            # if idx % opt.print_freq == 0:
-            #     print('Test: [{0}/{1}]\t'
-            #           'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
-            #           'Loss {loss.val:.4f} ({loss.avg:.4f})\t'
-            #           'Acc@1 {top1.val:.3f} ({top1.avg:.3f})\t'.format(
-            #            idx, len(val_loader), batch_time=batch_time,
-            #            loss=losses, top1=top1))
-
 
     # print("test-f1-score", f1_score(label_list, pred_list, average=None))
 
