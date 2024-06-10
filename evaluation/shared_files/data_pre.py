@@ -20,14 +20,17 @@ label_mapping = np.array([-1, 1, -1, 2, 3, -1, -1, -1, -1, -1, -1, -1, 4, 5, -1,
 ## load original data
 class Multimodal_dataset():
 	"""Build dataset from motion sensor data."""
-	def __init__(self, valid_actions, valid_mods, root ='../../PAMAP_Dataset/trainC/', data_duration=1000):
+	def __init__(self, valid_actions, valid_mods, root ='train_C', opt=None, data_duration=1000):
 		self.data_arr = []
 		self.labels = []
 		self.valid_mods = valid_mods
 
-		for file in sorted(os.listdir(root)):
-			self.data_arr.append(np.load(root + file))
-			self.labels.append(int(file.split('_')[0]))
+		index_file_path = os.path.join(opt.indice_file, f"{root}.txt")
+		index_files = np.loadtxt(index_file_path, dtype=str)
+
+		for file in sorted(index_files):
+			self.data_arr.append(np.load(os.path.join(opt.processed_data_path, file)))
+			self.labels.append(int(file.split('_')[1]))
 		self.data_arr = np.array(self.data_arr)
 		self.labels = np.array(self.labels)
 	

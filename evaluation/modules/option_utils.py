@@ -55,7 +55,18 @@ def parse_evaluation_option(exp_type, exp_tag):
     parser.add_argument('--seed', type=int, default=100)
     parser.add_argument('--gpu', type=int, default=-1)
     parser.add_argument('--common_modality', type=str, default="acc")
+    parser.add_argument('--dataset_split', type=str, default="split_0")
+
     opt = parser.parse_args()
+
+
+    # Dataset
+    indice_file = f"../indices/{opt.dataset_split}"
+    if not os.path.exists(indice_file):
+        raise ValueError(f"{indice_file} not found, please generate with preprocess.py/generate_index.py")
+    opt.processed_data_path = "/root/multimodal-bind/processed_data"
+    if not os.path.exists(opt.processed_data_path):
+        raise ValueError(f"{opt.processed_data_path} not found")
 
     torch.manual_seed(opt.seed)
     np.random.seed(opt.seed)

@@ -65,8 +65,17 @@ def parse_option(exp_type, exp_tag):
     # modality setting
     parser.add_argument('--common_modality', type=str, default="acc")
 
+    parser.add_argument('--dataset_split', type=str, default="split_0")
+
     opt = parser.parse_args()
 
+    # Dataset
+    opt.indice_file = f"../indices/{opt.dataset_split}"
+    if not os.path.exists(opt.indice_file):
+        raise ValueError(f"{opt.indice_file} not found, please generate with preprocess.py/generate_index.py")
+    opt.processed_data_path = "/root/multimodal-bind/processed_data"
+    if not os.path.exists(opt.processed_data_path):
+        raise ValueError(f"{opt.processed_data_path} not found")
 
     # Set load pretrain tag
     opt.load_pretrain = "no_load"
@@ -84,9 +93,9 @@ def parse_option(exp_type, exp_tag):
 
     # set the path according to the environment
     if "save_mmbind" in exp_type and ("unimod_autoencoder" in exp_tag or "contrastive" in exp_tag):
-        opt.save_path = f'./{exp_type}/save_{opt.dataset}_{exp_tag}_{opt.load_pretrain}_{opt.common_modality}_{opt.seed}/'
+        opt.save_path = f'./{exp_type}/save_{opt.dataset}_{exp_tag}_{opt.load_pretrain}_{opt.common_modality}_{opt.seed}_{opt.dataset_split}/'
     else:
-        opt.save_path = f'./{exp_type}/save_{opt.dataset}_{exp_tag}_{opt.load_pretrain}_{opt.common_modality}_{opt.seed}/'
+        opt.save_path = f'./{exp_type}/save_{opt.dataset}_{exp_tag}_{opt.load_pretrain}_{opt.common_modality}_{opt.seed}_{opt.dataset_split}/'
     opt.model_path = opt.save_path + 'models'
     opt.tb_path = opt.save_path + 'tensorboard'
     opt.result_path = opt.save_path + 'results/'

@@ -84,7 +84,18 @@ def parse_option():
 
     parser.add_argument('--common_modality', type=str, default="acc")
 
+    parser.add_argument('--dataset_split', type=str, default="split_0")
+
     opt = parser.parse_args()
+
+    # Dataset
+    opt.indice_file = f"../indices/{opt.dataset_split}"
+    if not os.path.exists(opt.indice_file):
+        raise ValueError(f"{opt.indice_file} not found, please generate with preprocess.py/generate_index.py")
+    opt.processed_data_path = "/root/multimodal-bind/processed_data"
+    if not os.path.exists(opt.processed_data_path):
+        raise ValueError(f"{opt.processed_data_path} not found")
+
     torch.manual_seed(opt.seed)
     np.random.seed(opt.seed)
 
@@ -101,9 +112,9 @@ def set_loader(opt):
 
     #load labeled train and test data
     print(f"=\tInitializing Dataset A for mod {multi_mod_space[0]}")
-    train_datasetA = data.Multimodal_dataset([], multi_mod_space[0], root='../PAMAP_Dataset/trainA/')
+    train_datasetA = data.Multimodal_dataset([], multi_mod_space[0], root='train_A', opt=opt)
     print(f"=\tInitializing Dataset B for mod {multi_mod_space[1]}")
-    train_datasetB = data.Multimodal_dataset([], multi_mod_space[1], root='../PAMAP_Dataset/trainB/')
+    train_datasetB = data.Multimodal_dataset([], multi_mod_space[1], root='train_B', opt=opt)
 
     train_loader_A = torch.utils.data.DataLoader(
         train_datasetA, batch_size=opt.batch_size,

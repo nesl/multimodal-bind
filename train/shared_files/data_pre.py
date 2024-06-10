@@ -3,6 +3,7 @@ import torch
 from sklearn.model_selection import train_test_split
 import random
 import os
+from modules.print_utils import pprint
 
 MEAN_OF_ACC = [-5.352440841728246, 3.032396945527465, 3.512015293987129]
 STD_OF_ACC = [5.965133282949386, 3.895971002273014, 3.5137488686049982]
@@ -20,17 +21,30 @@ label_mapping = np.array([-1, 1, -1, 2, 3, -1, -1, -1, -1, -1, -1, -1, 4, 5, -1,
 ## load original data
 class Multimodal_dataset():
 	"""Build dataset from motion sensor data."""
-	def __init__(self, valid_actions, valid_mods, root ='../../PAMAP_Dataset/trainC/', data_duration=1000):
+	def __init__(self, valid_actions, valid_mods, root ='train_C', opt=None, data_duration=1000):
 		self.data_arr = []
 		self.labels = []
 		self.valid_mods = valid_mods
 		self.file_names = []
-		for file in sorted(os.listdir(root)):
+
+		if "train_all_paired_AB" in root:
+			index_file_path = root
+			index_files = os.listdir(root)
+		else:
+			index_file_path = os.path.join(opt.indice_file, f"{root}.txt")
+			index_files = np.loadtxt(index_file_path, dtype=str)
+
+		pprint(f"Loading Multimodal {valid_mods} datasets from {index_file_path}")
+		print(f"=\tLoading Multimodal {valid_mods} datasets from {index_file_path}")
+
+		for file in sorted(index_files):
 			if file[-4:] != ".npy":
 				continue
-			self.data_arr.append(np.load(root + file, allow_pickle=True))
-			self.labels.append(int(file.split('_')[0]))
-			self.file_names.append(os.path.abspath(root + file))
+			
+			file_name = root + file if "train_all_paired_AB" in root else os.path.join(opt.processed_data_path, file)
+			self.data_arr.append(np.load(file_name, allow_pickle=True))
+			self.labels.append(int(file.split('_')[1]))
+			self.file_names.append(os.path.abspath(file_name))
 		self.data_arr = np.array(self.data_arr)
 		self.labels = np.array(self.labels)
 	

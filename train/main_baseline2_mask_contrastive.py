@@ -60,15 +60,15 @@ def set_loader(opt):
     #load labeled train and test data
     if opt.dataset == "train_AB":
         print(f"=\tTraining with dataset AB with A - {opt.valid_mod[0]} and B - {opt.valid_mod[1]}")
-        train_datasetA = data.Multimodal_dataset([], opt.valid_mod[0], root='../PAMAP_Dataset/trainA/')
-        train_datasetB = data.Multimodal_dataset([], opt.valid_mod[1], root='../PAMAP_Dataset/trainB/')
+        train_datasetA = data.Multimodal_dataset([], opt.valid_mod[0], root='train_A', opt=opt)
+        train_datasetB = data.Multimodal_dataset([], opt.valid_mod[1], root='train_B', opt=opt)
         train_dataset = ConcatDataset([train_datasetA, train_datasetB])
     elif opt.dataset == "train_A":
         print(f"=\tTraining with dataset A and valid mod {opt.valid_mod[0]}")
-        train_dataset = data.Multimodal_dataset([], opt.valid_mod[0], root='../PAMAP_Dataset/trainA/')
+        train_dataset = data.Multimodal_dataset([], opt.valid_mod[0], root='train_A', opt=opt)
     elif opt.dataset == "train_B":
         print(f"=\tTraining with dataset B and valid mod {opt.valid_mod[1]}")
-        train_dataset = data.Multimodal_dataset([], opt.valid_mod[1], root='../PAMAP_Dataset/trainB/')
+        train_dataset = data.Multimodal_dataset([], opt.valid_mod[1], root='train_B', opt=opt)
     else:
         raise Exception("Invalid dataset selection")
     

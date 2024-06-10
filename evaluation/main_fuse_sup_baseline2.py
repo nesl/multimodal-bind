@@ -27,8 +27,8 @@ from tqdm import tqdm
 
 def set_loader(opt):
 
-    train_dataset = data.Multimodal_dataset([], ['acc', 'gyro', 'mag'], root='../PAMAP_Dataset/trainC/')
-    test_dataset = data.Multimodal_dataset([], ['acc', 'gyro', 'mag'], root='../PAMAP_Dataset/test/')
+    train_dataset = data.Multimodal_dataset([], ['acc', 'gyro', 'mag'], root='train_C', opt=opt)
+    test_dataset = data.Multimodal_dataset([], ['acc', 'gyro', 'mag'], root='test', opt=opt)
 
     train_loader = torch.utils.data.DataLoader(
         train_dataset, batch_size=opt.batch_size,

@@ -38,11 +38,11 @@ def set_loader(opt):
     if opt.dataset == "train_A":
         print(f"=\tTraining {opt.valid_mod[0]} on dataset A")
         opt.other_mod = opt.valid_mod[0][1]
-        train_dataset = data.Multimodal_dataset([], opt.valid_mod[0], root='../PAMAP_Dataset/trainA/')
+        train_dataset = data.Multimodal_dataset([], opt.valid_mod[0], root='train_A', opt=opt)
     else:
         print(f"=\tTraining {opt.valid_mod[1]} on dataset B")
         opt.other_mod = opt.valid_mod[1][1]
-        train_dataset = data.Multimodal_dataset([], opt.valid_mod[1], root='../PAMAP_Dataset/trainB/')
+        train_dataset = data.Multimodal_dataset([], opt.valid_mod[1], root='train_B', opt=opt)
 
     train_loader = torch.utils.data.DataLoader(
         train_dataset, batch_size=opt.batch_size,

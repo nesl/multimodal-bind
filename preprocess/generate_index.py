@@ -17,7 +17,9 @@ splits = ["train_A", "train_B", "train_C", "test"]
 num_sub_per_split = len(subjects) // len(splits)
 
 
-indice_dir = f"./indices"
+indice_dir = f"../indices"
+if not os.path.exists(indice_dir):
+    os.makedirs(indice_dir)
 indice_gen_id = len(os.listdir(indice_dir))
 
 indice_id_dir = os.path.join(indice_dir, f"split_{indice_gen_id}")

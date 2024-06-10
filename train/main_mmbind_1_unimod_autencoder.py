@@ -37,14 +37,14 @@ def set_loader(opt):
 
     if opt.dataset == "train_A":
         print("=\tTraining dataset A")
-        train_dataset = data.Multimodal_dataset([], [common_modality], root='../PAMAP_Dataset/trainA/')
+        train_dataset = data.Multimodal_dataset([], [common_modality], root='train_A', opt=opt)
     elif opt.dataset == 'train_B':
         print("=\tTraining dataset B")
-        train_dataset = data.Multimodal_dataset([], [common_modality], root='../PAMAP_Dataset/trainB/')
+        train_dataset = data.Multimodal_dataset([], [common_modality], root='train_B', opt=opt)
     elif opt.dataset == 'train_AB':
         print("=\tTraining Concat Dataset from dataset A and B")
-        train_datasetA = data.Multimodal_dataset([], [common_modality], root='../PAMAP_Dataset/trainA/')
-        train_datasetB = data.Multimodal_dataset([], [common_modality], root='../PAMAP_Dataset/trainB/')
+        train_datasetA = data.Multimodal_dataset([], [common_modality], root='train_A', opt=opt)
+        train_datasetB = data.Multimodal_dataset([], [common_modality], root='train_B', opt=opt)
         train_dataset = ConcatDataset([train_datasetA, train_datasetB])
     else:
         raise Exception("invalid dataset")
