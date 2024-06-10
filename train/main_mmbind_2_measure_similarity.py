@@ -270,7 +270,7 @@ def main():
         print(reference_label[sample_index], search_label[select_feature_index], select_feature_index, np.max(temp_similarity_vector), temp_correct)
 
         index = {
-            "acc": 7,
+            "acc": 4,
             "gyro": 10,
             "mag": 13,
         }
@@ -281,7 +281,7 @@ def main():
         # if reference is A, then select is B
         select_index_begin = index[mod_B] if opt.reference_modality == "setA" else index[mod_A]
         reference_data[:, select_index_begin:select_index_begin+3] = select_data[:, select_index_begin:select_index_begin+3] 
-        np.save(save_paired_path + '/' +  str(label_mapper[label_A[sample_index]]) + f'_{opt.reference_modality}_' + str(file_counter) + '.npy', reference_data)
+        np.save(save_paired_path + '/' +  str(label_mapper[reference_label[sample_index]]) + f'_{opt.reference_modality}_' + str(file_counter) + '.npy', reference_data)
 
         file_counter += 1
 

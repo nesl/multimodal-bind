@@ -22,7 +22,7 @@ from shared_files.util import adjust_learning_rate, warmup_learning_rate, accura
 from shared_files.util import set_optimizer, save_model
 from shared_files import data_pre as data
 
-from models.imu_models import GyroMagEncoder, SupervisedGyroMag
+from models.imu_models import GyroMagEncoder, ModEncoder, SupervisedAccGyro, SupervisedAccMag, SupervisedGyroMag
 
 from tqdm import tqdm
 from modules.option_utils import parse_evaluation_option
@@ -47,16 +47,37 @@ def set_loader(opt):
 
 def set_model(opt):
 
-    model = SupervisedGyroMag()
-    model_template = GyroMagEncoder()
-    model_template.load_state_dict(torch.load('../train/save_upper_bound/save_train_AB_fuse_contrastive_load_pretrain_gyro/models/lr_0.0001_decay_0.0001_bsz_64/last.pth')['model'])
-    model.gyro_encoder = model_template.gyro_encoder
-    model.mag_encoder = model_template.mag_encoder
+    mod = opt.common_modality
+    mod_space = ['acc', 'gyro', 'mag']
+    multi_mod_space = [[mod, m] for m in mod_space if m != mod]
+
+    opt.valid_mod = multi_mod_space
+
+    mod1, mod2 = opt.valid_mod[0][1], opt.valid_mod[1][1]
+
+    if 'gyro' in {mod1, mod2} and 'mag' in {mod1, mod2}:
+        print(f"=\tInitializing GyroMag model")
+        model = SupervisedGyroMag()
+    
+    if 'acc' in {mod1, mod2} and 'mag' in {mod1, mod2}:
+        print(f"=\tInitializing AccMag model")
+        model = SupervisedAccMag()
+    
+    if 'acc' in {mod1, mod2} and 'gyro' in {mod1, mod2}:
+        print(f"=\tInitializing AccGyro model")
+        model = SupervisedAccGyro()
+
+    # model = SupervisedGyroMag()
+    model_template = ModEncoder()
+
+    weight = f"../train/save_upper_bound/save_train_AB_fuse_contrastive_load_pretrain_{mod}/models/lr_0.0001_decay_0.0001_bsz_64/last.pth"
+    model_template.load_state_dict(torch.load(weight)['model'])
+
+    setattr(model, f"{mod1}_encoder", getattr(model_template, f"{mod1}_encoder"))
+    setattr(model, f"{mod2}_encoder", getattr(model_template, f"{mod2}_encoder"))
+
     criterion = torch.nn.CrossEntropyLoss()
 
-    # enable synchronized Batch Normalization
-    # if opt.syncBN:
-    #     model = apex.parallel.convert_syncbn_model(model)
 
     if torch.cuda.is_available():
         # if torch.cuda.device_count() > 1:
@@ -64,8 +85,6 @@ def set_model(opt):
         model = model.cuda()
         criterion = criterion.cuda()
         cudnn.benchmark = True
-
-
 
     return model, criterion
 
@@ -121,22 +140,8 @@ def train(train_loader, model, criterion, optimizer, epoch, opt):
         batch_time.update(time.time() - end)
         end = time.time()
 
-        # print info
-        # if (idx + 1) % opt.print_freq == 0:
-        #     print('Train: [{0}][{1}/{2}]\t'
-        #           'BT {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
-        #           'DT {data_time.val:.3f} ({data_time.avg:.3f})\t'
-        #           'loss {loss.val:.3f} ({loss.avg:.3f})\t'
-        #           'Acc@1 {top1.val:.3f} ({top1.avg:.3f})\t'.format(
-        #            epoch, idx + 1, len(train_loader), batch_time=batch_time,
-        #            data_time=data_time, loss=losses, top1=top1))
-        #     sys.stdout.flush()
-
-    # print("label_list:",label_list, len(label_list))
-    # print("pred1_list:",pred1_list)
-
     F1score = f1_score(label_list, pred1_list, average=None)
-    # print('feature_f1:', F1score)
+    pprint(f'feature_f1: {F1score}')
 
 
     return losses.avg, top1.avg
@@ -179,10 +184,6 @@ def validate(val_loader, model, criterion, opt):
             rows = labels.cpu().numpy()
             cols = output.max(1)[1].cpu().numpy()
 
-            # print("labels:",rows)
-            # print("output:",cols)
-            # print("old confusion:",confusion)
-
             for label_index in range(labels.shape[0]):
                 confusion[rows[label_index], cols[label_index]] += 1
 
@@ -197,15 +198,6 @@ def validate(val_loader, model, criterion, opt):
             # measure elapsed time
             batch_time.update(time.time() - end)
             end = time.time()
-
-            # if idx % opt.print_freq == 0:
-            #     print('Test: [{0}/{1}]\t'
-            #           'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
-            #           'Loss {loss.val:.4f} ({loss.avg:.4f})\t'
-            #           'Acc@1 {top1.val:.3f} ({top1.avg:.3f})\t'.format(
-            #            idx, len(val_loader), batch_time=batch_time,
-            #            loss=losses, top1=top1))
-
 
     # print("test-f1-score", f1_score(label_list, pred_list, average=None))
 
@@ -266,11 +258,6 @@ def main():
         record_acc[epoch-1] = val_acc
         record_f1[epoch-1] = val_F1score
         record_acc_train[epoch-1] = train_acc
-        
-        # if epoch % opt.save_freq == 0:
-        #     save_file = os.path.join(
-        #         opt.save_folder, 'ckpt_epoch_{epoch}.pth'.format(epoch=epoch))
-        #     save_model(model, optimizer, opt, epoch, save_file)
 
         label_list = np.array(label_list)
         pred_list = np.array(pred_list)

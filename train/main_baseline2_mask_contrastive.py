@@ -32,6 +32,8 @@ from models.imu_models import FullIMUEncoder, SingleIMUAutoencoder
 
 def collate_fn_pad(batch):
     for i in range(len(batch)):
+        if ('acc' not in batch[i]['valid_mods']):
+            batch[i]['acc'] = np.zeros((1000, 3))
         if ('gyro' not in batch[i]['valid_mods']):
             batch[i]['gyro'] = np.zeros((1000, 3))
         if ('mag' not in batch[i]['valid_mods']):
@@ -57,9 +59,9 @@ def set_loader(opt):
 
     #load labeled train and test data
     if opt.dataset == "train_AB":
-        print("=\tTraining with dataset AB")
+        print(f"=\tTraining with dataset AB with A - {opt.valid_mod[0]} and B - {opt.valid_mod[1]}")
         train_datasetA = data.Multimodal_dataset([], opt.valid_mod[0], root='../PAMAP_Dataset/trainA/')
-        train_datasetB = data.Multimodal_dataset([], opt.valid_mod[1],  root='../PAMAP_Dataset/trainB/')
+        train_datasetB = data.Multimodal_dataset([], opt.valid_mod[1], root='../PAMAP_Dataset/trainB/')
         train_dataset = ConcatDataset([train_datasetA, train_datasetB])
     elif opt.dataset == "train_A":
         print(f"=\tTraining with dataset A and valid mod {opt.valid_mod[0]}")
@@ -95,14 +97,15 @@ def load_single_modal(opt, modality):
 def set_model(opt):
 
     model = FullIMUEncoder()
-    model_template = SingleIMUAutoencoder('gyro')
     criterion = ConFusionLoss(temperature=opt.temp)
 
-    if opt.load_pretrain == "load_pretrain":
-        model_template.load_state_dict(load_single_modal(opt, 'gyro'))
-        model.gyro_encoder = model_template.encoder
-        model_template.load_state_dict(load_single_modal(opt, 'mag'))
-        model.acc_encoder = model_template.encoder
+    # if opt.load_pretrain == "load_pretrain":
+    #     model_template = SingleIMUAutoencoder('gyro')
+    #     print(f"=\tLoading pretrain model")
+    #     model_template.load_state_dict(load_single_modal(opt, 'gyro'))
+    #     model.gyro_encoder = model_template.encoder
+    #     model_template.load_state_dict(load_single_modal(opt, 'mag'))
+    #     model.acc_encoder = model_template.encoder
     
     # enable synchronized Batch Normalization
     # if opt.syncBN:
@@ -184,12 +187,6 @@ def main():
         loss = train(train_loader, model, criterion, optimizer, epoch, opt)
 
         record_loss[epoch-1] = loss
-
-
-        if epoch % opt.save_freq == 0:
-            save_file = os.path.join(
-                opt.save_folder, 'ckpt_epoch_{epoch}.pth'.format(epoch=epoch))
-            save_model(model, optimizer, opt, epoch, save_file)
 
     
     np.savetxt(opt.result_path + f"loss_{opt.learning_rate}_{opt.epochs}.txt", record_loss)

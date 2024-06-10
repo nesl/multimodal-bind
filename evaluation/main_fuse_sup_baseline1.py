@@ -16,7 +16,7 @@ from shared_files.util import adjust_learning_rate, warmup_learning_rate, accura
 from shared_files.util import set_optimizer, save_model
 from shared_files import data_pre as data
 
-from models.imu_models import SingleIMUAutoencoder, SupervisedGyroMag
+from models.imu_models import SingleIMUAutoencoder, SupervisedAccGyro, SupervisedAccMag, SupervisedGyroMag
 from modules.option_utils import parse_evaluation_option
 from modules.print_utils import pprint
 
@@ -40,13 +40,39 @@ def set_loader(opt):
 
 def set_model(opt):
 
-    model = SupervisedGyroMag()
-    model_template = SingleIMUAutoencoder('mag')
-    model_template.load_state_dict(torch.load('../train/save_baseline1/save_train_A_autoencoder_no_load/models/lr_0.0001_decay_0.0001_bsz_64/last.pth')['model'])
-    model.gyro_encoder = model_template.encoder
+    mod = opt.common_modality
+    mod_space = ['acc', 'gyro', 'mag']
+    multi_mod_space = [[mod, m] for m in mod_space if m != mod]
 
-    model_template.load_state_dict(torch.load('../train/save_baseline1/save_train_B_autoencoder_no_load/models/lr_0.0001_decay_0.0001_bsz_64/last.pth')['model'])
-    model.mag_encoder = model_template.encoder
+    opt.valid_mod = multi_mod_space
+
+    mod1, mod2 = opt.valid_mod[0][1], opt.valid_mod[1][1]
+
+    if 'gyro' in {mod1, mod2} and 'mag' in {mod1, mod2}:
+        print(f"=\tInitializing GyroMag model")
+        model = SupervisedGyroMag()
+    
+    if 'acc' in {mod1, mod2} and 'mag' in {mod1, mod2}:
+        print(f"=\tInitializing AccMag model")
+        model = SupervisedAccMag()
+    
+    if 'acc' in {mod1, mod2} and 'gyro' in {mod1, mod2}:
+        print(f"=\tInitializing AccGyro model")
+        model = SupervisedAccGyro()
+    
+    model_template = SingleIMUAutoencoder('mag') # any mod should be ok
+
+    mod1_weight = f"../train/save_baseline1/save_train_A_autoencoder_no_load_{mod1}/models/lr_0.0001_decay_0.0001_bsz_64/last.pth"
+    mod2_weight = f"../train/save_baseline1/save_train_B_autoencoder_no_load_{mod2}/models/lr_0.0001_decay_0.0001_bsz_64/last.pth"
+
+    pprint(f"=\tLoad {mod1} weight from {mod1_weight}")
+    pprint(f"=\tLoad {mod2} weight from {mod2_weight}")
+    model_template.load_state_dict(torch.load(mod1_weight)['model'])
+    setattr(model, f"{mod1}_encoder", model_template.encoder)
+    # model.gyro_encoder = model_template.encoder
+    model_template.load_state_dict(torch.load(mod2_weight)['model'])
+    setattr(model, f"{mod2}_encoder", model_template.encoder)
+    # model.mag_encoder = model_template.encoder
 
     criterion = torch.nn.CrossEntropyLoss()
 
@@ -127,7 +153,7 @@ def train(train_loader, model, criterion, optimizer, epoch, opt):
     # print("pred1_list:",pred1_list)
 
     F1score = f1_score(label_list, pred1_list, average=None)
-    pprint('feature_f1:', F1score)
+    pprint(f'feature_f1: {F1score}')
 
 
     return losses.avg, top1.avg

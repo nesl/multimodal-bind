@@ -61,9 +61,8 @@ def parse_evaluation_option(exp_type, exp_tag):
     np.random.seed(opt.seed)
 
     # set the path according to the environment
-    opt.save_path = f'./save_{opt.dataset}{exp_tag}/'
-    if "sup_mmbind" in exp_tag:
-        opt.save_path = f'./save_{opt.dataset}{exp_tag}_{opt.common_modality}/'
+    # opt.save_path = f'./save_{opt.dataset}{exp_tag}/'
+    opt.save_path = f'./save_{opt.dataset}{exp_tag}_{opt.common_modality}/'
     
     print(f"=\tSaving models to path {opt.save_path}")
     print(f"=\tLearning rate: {opt.learning_rate}")
@@ -108,7 +107,7 @@ def parse_evaluation_option(exp_type, exp_tag):
             os.makedirs(folder)
         
     # setup logger
-    opt.log_file = os.path.join(opt.log_folder, f"train_{opt.learning_rate}_{opt.epochs}.log")
+    opt.log_file = os.path.join(opt.log_folder, f"train_lr_{opt.learning_rate}_decay_{opt.weight_decay}_{opt.epochs}.log")
     init_logger(opt.log_file)
     pprint(f"Initialized log file to {opt.log_file}")
 

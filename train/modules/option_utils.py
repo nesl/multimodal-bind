@@ -84,9 +84,9 @@ def parse_option(exp_type, exp_tag):
 
     # set the path according to the environment
     if "save_mmbind" in exp_type and ("unimod_autoencoder" in exp_tag or "contrastive" in exp_tag):
-        opt.save_path = f'./{exp_type}/save_{opt.dataset}_{exp_tag}_{opt.load_pretrain}_{opt.common_modality}/'
+        opt.save_path = f'./{exp_type}/save_{opt.dataset}_{exp_tag}_{opt.load_pretrain}_{opt.common_modality}_{opt.seed}/'
     else:
-        opt.save_path = f'./{exp_type}/save_{opt.dataset}_{exp_tag}_{opt.load_pretrain}_{opt.common_modality}/'
+        opt.save_path = f'./{exp_type}/save_{opt.dataset}_{exp_tag}_{opt.load_pretrain}_{opt.common_modality}_{opt.seed}/'
     opt.model_path = opt.save_path + 'models'
     opt.tb_path = opt.save_path + 'tensorboard'
     opt.result_path = opt.save_path + 'results/'
@@ -125,7 +125,7 @@ def parse_option(exp_type, exp_tag):
             os.makedirs(folder)
 
     # setup logger
-    opt.log_file = os.path.join(opt.log_folder, f"train_{opt.learning_rate}_{opt.epochs}.log")
+    opt.log_file = os.path.join(opt.log_folder, f"train_{opt.learning_rate}_{opt.epochs}_{opt.seed}.log")
     init_logger(opt.log_file)
     pprint(f"Initialized log file to {opt.log_file}")
 
@@ -195,8 +195,8 @@ def parse_evaluation_option(exp_type, exp_tag):
     for it in iterations:
         opt.lr_decay_epochs.append(int(it))
 
-    opt.model_name = 'lr_{}_decay_{}_bsz_{}'.\
-        format(opt.learning_rate, opt.weight_decay, opt.batch_size)
+    opt.model_name = 'lr_{}_decay_{}_bsz_{}_seed_{}'.\
+        format(opt.learning_rate, opt.weight_decay, opt.batch_size, opt.seed)
 
     if opt.cosine:
         opt.model_name = '{}_cosine'.format(opt.model_name)

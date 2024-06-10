@@ -22,7 +22,7 @@ from shared_files.util import adjust_learning_rate, warmup_learning_rate, accura
 from shared_files.util import set_optimizer, save_model
 from shared_files import data_pre as data
 
-from models.imu_models import SupervisedGyroMag
+from models.imu_models import SupervisedAccGyro, SupervisedAccMag, SupervisedGyroMag
 
 from modules.option_utils import parse_evaluation_option
 from modules.print_utils import pprint
@@ -46,7 +46,26 @@ def set_loader(opt):
 
 def set_model(opt):
 
-    model = SupervisedGyroMag()
+    mod = opt.common_modality
+    mod_space = ['acc', 'gyro', 'mag']
+    multi_mod_space = [[mod, m] for m in mod_space if m != mod]
+
+    opt.valid_mod = multi_mod_space
+
+    mod1, mod2 = opt.valid_mod[0][1], opt.valid_mod[1][1]
+
+    if 'gyro' in {mod1, mod2} and 'mag' in {mod1, mod2}:
+        print(f"=\tInitializing GyroMag model")
+        model = SupervisedGyroMag()
+    
+    if 'acc' in {mod1, mod2} and 'mag' in {mod1, mod2}:
+        print(f"=\tInitializing AccMag model")
+        model = SupervisedAccMag()
+    
+    if 'acc' in {mod1, mod2} and 'gyro' in {mod1, mod2}:
+        print(f"=\tInitializing AccGyro model")
+        model = SupervisedAccGyro()
+
     criterion = torch.nn.CrossEntropyLoss()
 
     # enable synchronized Batch Normalization

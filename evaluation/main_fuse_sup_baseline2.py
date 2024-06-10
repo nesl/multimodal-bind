@@ -1,4 +1,4 @@
-import sys
+import os
 import time
 
 # import tensorboard_logger as tb_logger
@@ -17,7 +17,7 @@ from shared_files.util import adjust_learning_rate, warmup_learning_rate, accura
 from shared_files.util import set_optimizer, save_model
 from shared_files import data_pre as data
 
-from models.imu_models import FullIMUEncoder, SupervisedGyroMag
+from models.imu_models import FullIMUEncoder, SingleIMUAutoencoder, SupervisedAccGyro, SupervisedAccMag, SupervisedGyroMag
 
 from modules.option_utils import parse_evaluation_option
 from modules.print_utils import pprint
@@ -43,11 +43,36 @@ def set_loader(opt):
 
 def set_model(opt):
 
-    model = SupervisedGyroMag()
+    mod = opt.common_modality
+    mod_space = ['acc', 'gyro', 'mag']
+    multi_mod_space = [[mod, m] for m in mod_space if m != mod]
+
+    opt.valid_mod = multi_mod_space
+
+    mod1, mod2 = opt.valid_mod[0][1], opt.valid_mod[1][1]
+
+    if 'gyro' in {mod1, mod2} and 'mag' in {mod1, mod2}:
+        print(f"=\tInitializing GyroMag model")
+        model = SupervisedGyroMag()
+    
+    if 'acc' in {mod1, mod2} and 'mag' in {mod1, mod2}:
+        print(f"=\tInitializing AccMag model")
+        model = SupervisedAccMag()
+    
+    if 'acc' in {mod1, mod2} and 'gyro' in {mod1, mod2}:
+        print(f"=\tInitializing AccGyro model")
+        model = SupervisedAccGyro()
+    
+    # model_template = SingleIMUAutoencoder('mag') # any mod should be ok
     model_template = FullIMUEncoder()
-    model_template.load_state_dict(torch.load('../train/save_baseline2/save_train_AB_mask_contrastive_no_load/models/lr_0.0001_decay_0.0001_bsz_64/last.pth')['model'])
-    model.gyro_encoder = model_template.gyro_encoder
-    model.mag_encoder = model_template.mag_encoder
+
+    weight = f"../train/save_baseline2/save_train_AB_mask_contrastive_no_load_{mod}/models/lr_0.0001_decay_0.0001_bsz_64/last.pth"
+    # weight = f"../train/save_baseline2/save_train_AB_mask_contrastive_no_load/models/lr_0.0001_decay_0.0001_bsz_64/last.pth"
+    pprint(f"=\tLoad {mod} (masked) weight from {weight}")
+    model_template.load_state_dict(torch.load(weight)['model'])
+    setattr(model, f"{mod1}_encoder", getattr(model_template, f"{mod1}_encoder"))
+    setattr(model, f"{mod2}_encoder", getattr(model_template, f"{mod2}_encoder"))
+
     criterion = torch.nn.CrossEntropyLoss()
 
     # enable synchronized Batch Normalization
@@ -128,7 +153,7 @@ def train(train_loader, model, criterion, optimizer, epoch, opt):
     # print("pred1_list:",pred1_list)
 
     F1score = f1_score(label_list, pred1_list, average=None)
-    # print('feature_f1:', F1score)
+    # pprint(f'feature_f1: {F1score}')
 
 
     return losses.avg, top1.avg
@@ -214,7 +239,7 @@ def main():
     best_acc = 0
     best_rec = 0
     best_prec = 0
-    opt = parse_evaluation_option("baseline2", "baseline2")
+    opt = parse_evaluation_option("baseline2_test", "baseline2_test")
 
     # build data loader
     train_loader, val_loader = set_loader(opt)
@@ -275,9 +300,8 @@ def main():
         np.savetxt(os.path.join(opt.result_folder , "train_accuracy.txt"), record_acc_train)
     
     # save the last model
-    # save_file = os.path.join(
-    #     opt.save_folder, 'last.pth')
-    # save_model(model, optimizer, opt, opt.epochs, save_file)
+    save_file = os.path.join(opt.save_folder, 'last.pth')
+    save_model(model, optimizer, opt, opt.epochs, save_file)
 
     # print("result of {}:".format(opt.dataset))
     print('best accuracy: {:.3f}'.format(best_acc))

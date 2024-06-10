@@ -31,6 +31,8 @@ from modules.print_utils import pprint
 
 def collate_fn_pad(batch):
     for i in range(len(batch)):
+        if ('acc' not in batch[i]['valid_mods']):
+            batch[i]['acc'] = np.zeros((1000, 3))
         if ('gyro' not in batch[i]['valid_mods']):
             batch[i]['gyro'] = np.zeros((1000, 3))
         if ('mag' not in batch[i]['valid_mods']):
@@ -50,18 +52,25 @@ def collate_fn_pad(batch):
 def set_loader(opt):
 
     #load labeled train and test data
-    print("train data:")
+    mod = opt.common_modality
+    mod_space = ['acc', 'gyro', 'mag']
+    multi_mod_space = [[mod, m] for m in mod_space if m != mod]
+
+    opt.valid_mod = multi_mod_space
+    opt.other_mod = [opt.valid_mod[0][1], opt.valid_mod[1][1]]
+
+    #load labeled train and test data
     if opt.dataset == "train_AB":
-        print("Training with dataset AB")
-        train_datasetA = data.Multimodal_dataset([], ['acc', 'gyro'], root='../PAMAP_Dataset/trainA/')
-        train_datasetB = data.Multimodal_dataset([], ['acc', 'mag'],  root='../PAMAP_Dataset/trainB/')
+        print(f"=\tTraining with dataset AB with A - {opt.valid_mod[0]} and B - {opt.valid_mod[1]}")
+        train_datasetA = data.Multimodal_dataset([], opt.valid_mod[0], root='../PAMAP_Dataset/trainA/')
+        train_datasetB = data.Multimodal_dataset([], opt.valid_mod[1],  root='../PAMAP_Dataset/trainB/')
         train_dataset = ConcatDataset([train_datasetA, train_datasetB])
     elif opt.dataset == "train_A":
-        print("Training with dataset A only")
-        train_dataset = data.Multimodal_dataset([], ['acc', 'gyro'], root='../PAMAP_Dataset/trainA/')
+        print(f"=\tTraining with dataset A and valid mod {opt.valid_mod[0]}")
+        train_dataset = data.Multimodal_dataset([], opt.valid_mod[0], root='../PAMAP_Dataset/trainA/')
     elif opt.dataset == "train_B":
-        print("Training with dataset B only")
-        train_dataset = data.Multimodal_dataset([], ['acc', 'gyro'], root='../PAMAP_Dataset/trainB/')
+        print(f"=\tTraining with dataset B and valid mod {opt.valid_mod[1]}")
+        train_dataset = data.Multimodal_dataset([], opt.valid_mod[1], root='../PAMAP_Dataset/trainB/')
     else:
         raise Exception("Invalid dataset selection")
     
@@ -104,10 +113,11 @@ def load_single_modal(opt, modality):
 def set_model(opt):
 
     model = FullIMUEncoder()
-    model_template = SingleIMUAutoencoder('gyro')
     criterion = ConFusionLoss(temperature=opt.temp)
 
     if opt.load_pretrain == "load_pretrain":
+        model_template = SingleIMUAutoencoder('gyro')
+        print(f"=\tLoading pretrain model")
         model_template.load_state_dict(load_single_modal(opt, 'gyro'))
         model.gyro_encoder = model_template.encoder
         model_template.load_state_dict(load_single_modal(opt, 'mag'))
@@ -119,14 +129,13 @@ def set_model(opt):
 
     if torch.cuda.is_available():
         # if torch.cuda.device_count() > 1:
-        #     model = torch.nn.DataParallel(model)
+            # model = torch.nn.DataParallel(model)
         model = model.cuda()
         criterion = criterion.cuda()
         cudnn.benchmark = True
 
 
     return model, criterion
-
 
 
 def train(train_loader, model, criterion, optimizer, epoch, opt):
@@ -149,17 +158,47 @@ def train(train_loader, model, criterion, optimizer, epoch, opt):
         
         # acc is the shared feature
         acc_embed, gyro_embed, mag_embed = model(batched_data)
+        mod_embed = {
+            "acc": acc_embed,
+            "gyro": gyro_embed,
+            "mag": mag_embed
+        }
+        
         bsz = acc_embed.shape[0]
 
+        common_mod_embed = mod_embed[opt.common_modality]
+
+
+        """
         valid_mods = batched_data['valid_mods']
+
         gyro_mask = torch.tensor([1 if 'gyro' in mods else 0 for mods in valid_mods])
         mag_mask = torch.tensor([1 if 'mag' in mods else 0 for mods in valid_mods])
         gyro_mask = torch.unsqueeze(gyro_mask, dim=-1).cuda()
         mag_mask = torch.unsqueeze(mag_mask, dim=-1).cuda()
 
         combined_features = gyro_mask * gyro_embed + mag_mask * mag_embed
-
         features = FeatureConstructor(acc_embed, combined_features, 2)
+        """
+
+
+
+        valid_mods = batched_data['valid_mods'] # [common mod, mod1] or [common mod, mod2]
+
+        other_mod1, other_mod2 = opt.other_mod
+
+        mod1_embed = mod_embed[other_mod1]
+        mod2_embed = mod_embed[other_mod2]
+
+        mod1_mask = torch.tensor([1 if other_mod1 in mods else 0 for mods in valid_mods])
+        mod2_mask = torch.tensor([1 if other_mod2 in mods else 0 for mods in valid_mods])
+
+        mod1_mask = torch.unsqueeze(mod1_mask, dim=-1).cuda()
+        mod2_mask = torch.unsqueeze(mod2_mask, dim=-1).cuda()
+
+        combined_features = mod1_mask * mod1_embed + mod2_mask * mod2_embed
+
+        features = FeatureConstructor(common_mod_embed, combined_features, 2)
 
         loss = criterion(features)
         losses.update(loss.item(), bsz)
@@ -214,10 +253,10 @@ def main():
         record_loss[epoch-1] = loss
 
 
-        if epoch % opt.save_freq == 0:
-            save_file = os.path.join(
-                opt.save_folder, 'ckpt_epoch_{epoch}.pth'.format(epoch=epoch))
-            save_model(model, optimizer, opt, epoch, save_file)
+        # if epoch % opt.save_freq == 0:
+        #     save_file = os.path.join(
+        #         opt.save_folder, 'ckpt_epoch_{epoch}.pth'.format(epoch=epoch))
+        #     save_model(model, optimizer, opt, epoch, save_file)
 
         np.savetxt(opt.result_path + "loss_{}_{}.txt".format(opt.learning_rate, opt.batch_size), record_loss)
     

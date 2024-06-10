@@ -250,8 +250,8 @@ class SupervisedAccGyro(nn.Module):
 class SupervisedAccMag(nn.Module):
     def __init__(self):
         super(SupervisedAccMag, self).__init__()
-        self.mag_encoder = SingleIMUEncoder('mag')
         self.acc_encoder = SingleIMUEncoder('acc')
+        self.mag_encoder = SingleIMUEncoder('mag')
         self.output_head = nn.Sequential(
             nn.Linear(1920 * 2, 1920),
             nn.ReLU(),
@@ -269,8 +269,6 @@ class SupervisedAccMag(nn.Module):
         
         combined = torch.cat((mag_embed, acc_embed), dim=-1)
         return self.output_head(combined)
-
-
 
 if __name__ == '__main__':
 

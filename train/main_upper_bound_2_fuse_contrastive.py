@@ -50,36 +50,6 @@ def set_loader(opt):
     return train_loader
 
 
-
-def load_single_modal(opt, modality):
-
-    if opt.load_pretrain == "load_pretrain":
-        if modality == 'acc':
-            opt.ckpt = './save_baseline1/save_train_A_autoencoder_no_load/models/lr_0.0001_decay_0.0001_bsz_64/'
-        else:
-            opt.ckpt = './save_baseline1/save_train_B_autoencoder_no_load/models/lr_0.0001_decay_0.0001_bsz_64/'
-    elif opt.load_pretrain == "load_self_AE_pretrain":
-        opt.ckpt = './save_upper_bound/unimodal_pretrain/save_{}_{}_autoencoder/models/lr_0.0001_decay_0.0001_bsz_64/'.format(opt.dataset, modality)
-
-    ckpt_path = opt.ckpt + 'last.pth'
-    ckpt = torch.load(ckpt_path, map_location='cpu')
-    state_dict = ckpt['model']
-
-    if modality == "acc":
-        layer_key = 'acc_encoder.'
-    else:
-        layer_key = 'gyro_encoder.'
-    new_state_dict = {}
-    for k, v in state_dict.items():
-        if layer_key in k:
-            k = k.replace(layer_key, "")
-            if torch.cuda.is_available():
-                k = k.replace("module.", "")
-            new_state_dict[k] = v
-    state_dict = new_state_dict
-
-    return state_dict
-
 def set_model(opt):
 
     mod = opt.common_modality
@@ -95,7 +65,7 @@ def set_model(opt):
     if opt.load_pretrain == "load_pretrain":
         print("=\tLoading pretrained weights from step 1")
         print(f"=\tLoading IMUEncoder for {mod}")
-        model_template = SingleIMUAutoencoder(mod)
+        model_template = SingleIMUAutoencoder(mod) # any mod should be fine
 
         mod1 = opt.valid_mod[0][1]
         mod2 = opt.valid_mod[1][1]
@@ -183,12 +153,6 @@ def main():
         loss = train(train_loader, model, criterion, optimizer, epoch, opt)
 
         record_loss[epoch-1] = loss
-
-
-        if epoch % opt.save_freq == 0:
-            save_file = os.path.join(
-                opt.save_folder, 'ckpt_epoch_{epoch}.pth'.format(epoch=epoch))
-            save_model(model, optimizer, opt, epoch, save_file)
         
         pprint(f"Epoch {epoch} - Loss: {loss}")
 
