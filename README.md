@@ -6,6 +6,22 @@ Multimodal Embedding Learning with Distributed Incomplete Data
 
 ## Code of UTD dataset
 #train
-
+Baseline 1: Single-modal autoencoder
+Baseline 2: Incomplete multimodal
+Baseline 3: Incomplete multimodal + masked vector
+Baseline 4: Cross-modal generation (also three steps)
+Baseline 5: Dual contrastive
+Upper Bound (all natually paired data): Single-modal autoencoder + multimodal contrastive (data of two paired modalities)
+mmbind_contarstive (manually paired data by mmbind): Single-modal autoencoder + multimodal contrastive (data of two paired modalities)
+mmbind_incomplete_contarstive (origianl data + manually paired data by mmbind): Incomplete multimodal contrastive (data of three incomplete modalities)
 
 #evaluate
+Lower_bound: Limited labeled paired data for supervised model finetuening
+Baseline 1: Single-modal autoencoder
+Baseline 2: Incomplete multimodal
+Baseline 3: Incomplete multimodal + masked vector
+Baseline 4: Cross-modal generation
+Baseline 5: Dual contrastive
+Upper Bound (all natually paired data): Single-modal autoencoder + multimodal contrastive
+mmbind_contarstive (manually paired data by mmbind): Single-modal autoencoder + multimodal contrastive (data of two paired modalities)
+mmbind_incomplete_contarstive (origianl data + manually paired data by mmbind): Incomplete multimodal contrastive (data of three incomplete modalities)
