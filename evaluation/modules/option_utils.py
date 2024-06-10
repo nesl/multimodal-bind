@@ -61,9 +61,9 @@ def parse_evaluation_option(exp_type, exp_tag):
 
 
     # Dataset
-    indice_file = f"../indices/{opt.dataset_split}"
-    if not os.path.exists(indice_file):
-        raise ValueError(f"{indice_file} not found, please generate with preprocess.py/generate_index.py")
+    opt.indice_file = f"../indices/{opt.dataset_split}"
+    if not os.path.exists(opt.indice_file):
+        raise ValueError(f"{opt.indice_file} not found, please generate with preprocess.py/generate_index.py")
     opt.processed_data_path = "/root/multimodal-bind/processed_data"
     if not os.path.exists(opt.processed_data_path):
         raise ValueError(f"{opt.processed_data_path} not found")
@@ -73,7 +73,7 @@ def parse_evaluation_option(exp_type, exp_tag):
 
     # set the path according to the environment
     # opt.save_path = f'./save_{opt.dataset}{exp_tag}/'
-    opt.save_path = f'./save_{opt.dataset}{exp_tag}_{opt.common_modality}/'
+    opt.save_path = f'./save_{opt.dataset}{exp_tag}_{opt.common_modality}_{opt.seed}_{opt.dataset_split}/'
     
     print(f"=\tSaving models to path {opt.save_path}")
     print(f"=\tLearning rate: {opt.learning_rate}")

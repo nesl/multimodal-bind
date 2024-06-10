@@ -69,10 +69,10 @@ def set_model(opt):
 
         mod1 = opt.valid_mod[0][1]
         mod2 = opt.valid_mod[1][1]
-        model_template.load_state_dict(torch.load(f'./save_upper_bound/unimodal_pretrain/save_train_AB_autoencoder_no_load_{mod1}/models/lr_0.0001_decay_0.0001_bsz_64/last.pth')['model'])
+        model_template.load_state_dict(torch.load(f'./save_upper_bound/unimodal_pretrain/save_train_AB_autoencoder_no_load_{mod1}_{opt.seed}_{opt.dataset_split}/models/lr_0.0001_decay_0.0001_bsz_64/last.pth')['model'])
         setattr(model, f"{mod1}_encoder", model_template.encoder)
 
-        model_template.load_state_dict(torch.load(f'./save_upper_bound/unimodal_pretrain/save_train_AB_autoencoder_no_load_{mod2}/models/lr_0.0001_decay_0.0001_bsz_64/last.pth')['model'])
+        model_template.load_state_dict(torch.load(f'./save_upper_bound/unimodal_pretrain/save_train_AB_autoencoder_no_load_{mod2}_{opt.seed}_{opt.dataset_split}/models/lr_0.0001_decay_0.0001_bsz_64/last.pth')['model'])
         setattr(model, f"{mod2}_encoder", model_template.encoder)
 
     if torch.cuda.is_available():
