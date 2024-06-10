@@ -45,7 +45,7 @@ def collate_fn_padd(batch):
 
     for i in range(len(batch)):
         if ('input_depth' not in batch[i].keys()):
-            batch[i]['input_depth'] = torch.full((30, 3, 48, 64), -1.1)
+            batch[i]['input_depth'] = torch.full((30, 1, 48, 64), -1.1)
         if ('input_mmwave' not in batch[i].keys()):
             batch[i]['input_mmwave'] = torch.full((1, 297, 5), -1.1)
 
@@ -105,7 +105,7 @@ def parse_option():
     # temperature
     parser.add_argument('--temp', type=float, default=0.07,
                         help='temperature for loss function')
-    parser.add_argument('--load_pretrain', type=str, default='load_pretrain', help='load_pretrain')
+    parser.add_argument('--load_pretrain', type=str, default='no_pretrain', help='load_pretrain')
 
     # other setting
     parser.add_argument('--cosine', action='store_true',
@@ -185,7 +185,7 @@ def set_loader(opt):
 
     # Return single train loader
     train_loader = torch.utils.data.DataLoader(
-        train_dataset, batch_size=opt.batch_size, num_workers=opt.num_workers,
+        train_dataset, batch_size=opt.batch_size, num_workers = opt.num_workers,
          collate_fn=collate_fn_padd, pin_memory=True, shuffle=True)
     
 
@@ -195,9 +195,6 @@ def set_loader(opt):
 def set_model(opt):
 
     model = DualContrastiveModel()
-    # LOAD PRETRAINED WEIGHTS HERE
-    # model.depth_encoder.load_state_dict(...)
-    # model.mmwave_encoder.load_state_dict(...)
     model = model.cuda()
     criterion = ConFusionLoss(temperature=opt.temp)
 

@@ -92,7 +92,7 @@ def parse_option():
     parser.add_argument('--model', type=str, default='MyUTDmodel')
     parser.add_argument('--dataset', type=str, default='train_all_paired_AB', 
                         choices=['train_acc_paired_AB', 'train_gyro_paired_AB', 'train_all_paired_AB'], help='dataset')
-    parser.add_argument('--load_pretrain', type=str, default='load_pretrain', help='load_pretrain')
+    parser.add_argument('--load_pretrain', type=str, default='no_pretrain', help='load_pretrain')
     parser.add_argument('--num_class', type=int, default=27,
                         help='num_class')
     # temperature
@@ -166,17 +166,17 @@ def set_loader(opt):
         print("train paired data:")
         with open('../Configs/config_train_AB_Contrastive.yaml', 'r') as handle:
             config_train = yaml.load(handle, Loader=yaml.FullLoader)
-            train_dataset, _ = make_dataset('../../MMFI_Dataset_train_merged_paired_AB/', config_train)
+            train_dataset, _ = make_dataset('../../save_mmbind/train_merged_paired_AB/', config_train)
     elif opt.dataset == "train_depth_paired_AB":
         print("train paired data:")
         with open('../Configs/config_train_A_Contrastive.yaml', 'r') as handle:
             config_train = yaml.load(handle, Loader=yaml.FullLoader)
-            train_dataset, _ = make_dataset('../../MMFI_Dataset_train_depth_paired_AB/', config_train)
+            train_dataset, _ = make_dataset('../../save_mmbind/train_depth_paired_AB/', config_train)
     elif opt.dataset == "train_mmwave_paired_AB":
         print("train paired data:")
         with open('../Configs/config_train_B_Contrastive.yaml', 'r') as handle:
             config_train = yaml.load(handle, Loader=yaml.FullLoader)
-            train_dataset, _ = make_dataset('../../MMFI_Dataset_train_mmwave_paired_AB/', config_train)
+            train_dataset, _ = make_dataset('../../save_mmbind/train_mmwave_paired_AB/', config_train)
     else:
         raise Exception('invalid training dataset')
     
@@ -201,13 +201,6 @@ def set_model(opt):
         criterion = criterion.cuda()
         cudnn.benchmark = True
 
-    if opt.load_pretrain == "load_pretrain":
-        model.depth_encoder.load_state_dict(torch.load(
-            '/save_baseline1/save_train_A_autoencoder/models/lr_0.0003_decay_0.0001_bsz_32/last.pth'
-        )['model'])
-        model.mmWave_encoder.load_state_dict(torch.load(
-            '/save_baseline1/save_train_B_autoencoder/models/lr_0.0003_decay_0.0001_bsz_32/last.pth'
-        )['model'])
 
     return model, criterion
 

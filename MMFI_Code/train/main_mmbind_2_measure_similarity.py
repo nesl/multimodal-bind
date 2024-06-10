@@ -233,7 +233,7 @@ def main():
         search_feature = features_A
         search_label = label_A
 
-    save_paired_path = "../../MMFI_Dataset_train_{}_paired_AB/".format(opt.reference_modality)
+    save_paired_path = "./save_mmbind/train_{}_paired_AB/".format(opt.reference_modality)
     
 
     if not os.path.isdir(save_paired_path):

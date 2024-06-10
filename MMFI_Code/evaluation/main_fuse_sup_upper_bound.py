@@ -31,7 +31,6 @@ try:
 except ImportError:
     pass
 
-# TODO UNSURE ABOUT THIS
 
 def collate_fn_padd(batch):
     '''
@@ -112,7 +111,7 @@ def parse_option():
     np.random.seed(opt.seed)
 
     # set the path according to the environment
-    opt.save_path = './save_baseline1/'
+    opt.save_path = './save_upper_bound/'
     opt.model_path = opt.save_path + 'models'
     opt.tb_path = opt.save_path + 'tensorboard'
     opt.result_path = opt.save_path + 'results/'
@@ -180,7 +179,7 @@ def set_loader(opt):
 # TODO changed
 def load_single_modal(opt, dataset):
 
-    opt.ckpt = '../train/save_baseline1/save_{}_autoencoder/models/lr_0.0001_decay_0.0001_bsz_64/'.format(dataset)
+    opt.ckpt = '../train/save_upper_bound/save_{}_autoencoder/models/lr_0.0001_decay_0.0001_bsz_64/'.format(dataset)
     ckpt_path = opt.ckpt + 'last.pth'
     ckpt = torch.load(ckpt_path, map_location='cpu')
     state_dict = ckpt['model']
@@ -204,6 +203,14 @@ def load_single_modal(opt, dataset):
 def set_model(opt):
 
     model = model_lib.mmWaveDepthSupervised()
+
+    model_template = model_lib.mmWaveDepthContrastive() # TODO changed this
+    checkpoint = '../train/save_upper_bound/save_train_AB_contrastive_no_pretrain/models/lr_0.0005_decay_0.0001_bsz_64/last.pth'
+    model_template.load_state_dict(torch.load(checkpoint)['model'])
+    # Copy the model weights between the two models, TODO use pdb to verify that the weights are correctly loaded
+    model.depth_encoder = model_template.depth_encoder
+    model.mmWave_encoder = model_template.mmWave_encoder
+
     criterion = torch.nn.CrossEntropyLoss()
     
     # enable synchronized Batch Normalization

@@ -12,17 +12,17 @@ import torch.backends.cudnn as cudnn
 import torch.optim as optim
 # from torchvision import transforms, datasets
 
-
 import numpy as np
+import yaml
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import f1_score
 
 from shared_files.util import AverageMeter
 from shared_files.util import adjust_learning_rate, warmup_learning_rate, accuracy
 from shared_files.util import set_optimizer, save_model
-from shared_files import data_pre as data
+from shared_files.PickleDataset import make_dataset
+import models.model as model_lib
 
-from models.fuse_acc_gyro_skeleton import MyUTDmodel_3M_All
 
 
 try:
@@ -31,8 +31,34 @@ try:
 except ImportError:
     pass
 
-# BASELINE 2 IS NOT DONE, not too familiar with this to start making big changes
+# Standard collate_fn_padd for loading paired data
+def collate_fn_padd(batch):
+    '''
+    Padds batch of variable length
+    '''
 
+    batch_data = {'modality': batch[0]['modality'],
+                  'scene': [sample['scene'] for sample in batch],
+                  'subject': [sample['subject'] for sample in batch],
+                  'action': [sample['action'] for sample in batch],
+                  'idx': [sample['idx'] for sample in batch] if 'idx' in batch[0] else None
+                  }
+    _output = [np.array(sample['output']) for sample in batch]
+    _output = torch.FloatTensor(np.array(_output))
+    batch_data['output'] = _output
+
+    for mod in batch_data['modality']:
+        if mod in ['mmwave', 'lidar']:
+            _input = [torch.Tensor(sample['input_' + mod]) for sample in batch]
+            _input = torch.nn.utils.rnn.pad_sequence(_input)
+            _input = _input.permute(1, 2, 0, 3)
+            batch_data['input_' + mod] = _input
+        else:
+            _input = [np.array(sample['input_' + mod]) for sample in batch]
+            _input = torch.FloatTensor(np.array(_input))
+            batch_data['input_' + mod] = _input
+
+    return batch_data
 
 def parse_option():
     parser = argparse.ArgumentParser('argument for training')
@@ -49,7 +75,7 @@ def parse_option():
                         help='number of training epochs')
 
     # optimization
-    parser.add_argument('--learning_rate', type=float, default=5e-4,
+    parser.add_argument('--learning_rate', type=float, default=3e-4, # 3e-4 worked on combined multimodal model. Doesnt work 1e-4 and 1e-3
                         help='learning rate')
     parser.add_argument('--momentum', type=float, default=0.9,
                         help='momentum')
@@ -62,7 +88,9 @@ def parse_option():
 
     # model dataset
     parser.add_argument('--model', type=str, default='MyUTDmodel')
-    parser.add_argument('--dataset', type=str, default='train_C/label_216/', help='dataset')
+    # TODO changed
+    parser.add_argument("--train_config", type=str, default="../Configs/config_train_C.yaml", help="Configuration YAML file")
+    parser.add_argument("--val_config", type=str, default="../Configs/config_val.yaml", help="Configuration YAML file")
     parser.add_argument('--num_class', type=int, default=27,
                         help='num_class')
 
@@ -81,12 +109,12 @@ def parse_option():
 
     torch.manual_seed(opt.seed)
     np.random.seed(opt.seed)
-    
+
     # set the path according to the environment
-    opt.save_path = './save_{}baseline2/'.format(opt.dataset)
+    opt.save_path = './save_baseline2/'
     opt.model_path = opt.save_path + 'models'
-    opt.tb_path = opt.save_path + 'tensorboard'.format(opt.dataset)
-    opt.result_path = opt.save_path + 'results/'.format(opt.dataset)
+    opt.tb_path = opt.save_path + 'tensorboard'
+    opt.result_path = opt.save_path + 'results/'
 
     iterations = opt.lr_decay_epochs.split(',')
     opt.lr_decay_epochs = list([])
@@ -126,64 +154,54 @@ def parse_option():
 
     return opt
 
-
+# TODO changed
 def set_loader(opt):
 
-    #load labeled train and test data
-    print("train labeled data:")
-    x_train_1, x_train_2, x_train_3, y_train, mask_train = data.load_data_incomplete(opt.dataset)
+    # Load finetuning dataset and test dataset
+    with open(opt.train_config, 'r') as handle:
+        config_train = yaml.load(handle, Loader=yaml.FullLoader)
+    with open(opt.val_config, 'r') as handle:
+        config_val = yaml.load(handle, Loader=yaml.FullLoader)
 
-    print("test data:")
-    x_test_1, x_test_2, x_test_3, y_test, mask_test = data.load_data_incomplete("test")
-
-    train_dataset = data.Multimodal_incomplete_dataset(x_train_1, x_train_2, x_train_3, y_train, mask_train)
-    test_dataset = data.Multimodal_incomplete_dataset(x_test_1, x_test_2, x_test_3, y_test, mask_test)
+    train_dataset, _ = make_dataset('../../MMFI_Dataset/', config_train)
+    val_dataset, _ = make_dataset('../../MMFI_Dataset/', config_val)
 
     train_loader = torch.utils.data.DataLoader(
-        train_dataset, batch_size=opt.batch_size,
-        num_workers=opt.num_workers, pin_memory=True, shuffle=True)
+        train_dataset, batch_size=opt.batch_size, num_workers=opt.num_workers,
+         collate_fn=collate_fn_padd, pin_memory=True, shuffle=True)
+
     val_loader = torch.utils.data.DataLoader(
-        test_dataset, batch_size=opt.batch_size,
-        num_workers=opt.num_workers, pin_memory=True, shuffle=True)
+        val_dataset, batch_size=opt.batch_size, num_workers=opt.num_workers,
+        collate_fn=collate_fn_padd, pin_memory=True, shuffle=True)
 
     return train_loader, val_loader
 
 
-
+# TODO changed
 def set_model(opt):
+    # Create our supervised model and also a template model we load weights into
+    model = model_lib.mmWaveDepthSupervised()
+    model_template = model_lib.DualContrastiveModel()
 
-    model = MyUTDmodel_3M_All(input_size=1, num_classes=opt.num_class)
+    checkpoint = '../train/save_baseline2/save_train_AB_mask_contrastive_no_pretrain/models/lr_0.001_decay_0.0001_bsz_64/last.pth'
+    model_template.load_state_dict(torch.load(checkpoint)['model'])
+
+    # Copy the model weights between the two models, TODO use pdb to verify that the weights are correctly loaded
+    model.depth_encoder = model_template.depth_encoder
+    model.mmWave_encoder = model_template.mmWave_encoder
+
     criterion = torch.nn.CrossEntropyLoss()
-
-    opt.ckpt = '../train/save_baseline2/save_train_AB_mask_contrastive_no_load/models/lr_0.001_decay_0.0001_bsz_64/'
-    ckpt_path = opt.ckpt + 'last.pth'
-    # ckpt_path = opt.ckpt + 'ckpt_epoch_40.pth'
-    ckpt = torch.load(ckpt_path, map_location='cpu')
-    state_dict = ckpt['model']
-
     # enable synchronized Batch Normalization
     if opt.syncBN:
         model = apex.parallel.convert_syncbn_model(model)
 
     if torch.cuda.is_available():
         if torch.cuda.device_count() > 1:
-            model.feature_extractor = torch.nn.DataParallel(model.feature_extractor)
-        else:
-            new_state_dict = {}
-            for k, v in state_dict.items():
-                k = k.replace("module.", "")
-                new_state_dict[k] = v
-            state_dict = new_state_dict
+            model = torch.nn.DataParallel(model)
         model = model.cuda()
         criterion = criterion.cuda()
         cudnn.benchmark = True
 
-    model.load_state_dict(state_dict)
-
-    # #freeze the MLP head in pretrained model
-    for name, param in model.named_parameters():
-        if name in ['head_1.1.weight', 'head_1.1.bias', 'head_1.4.weight', 'head_1.4.bias', 'head_2.1.weight', 'head_2.1.bias', 'head_2.4.weight', 'head_2.4.bias']:
-            param.requires_grad = False
 
     return model, criterion
 
@@ -201,28 +219,26 @@ def train(train_loader, model, criterion, optimizer, epoch, opt):
 
     label_list = []
     pred1_list = []
-
-    for idx, (input_data1, input_data2, input_data3, labels, mask) in enumerate(train_loader):
+    softmax = torch.nn.Softmax(dim=-1)
+    for idx, batched_data in enumerate(train_loader):
         data_time.update(time.time() - end)
 
-        if torch.cuda.is_available():
-            input_data1 = input_data1.cuda()
-            input_data2 = input_data2.cuda()
-            input_data3 = input_data3.cuda()
-            labels = labels.cuda()
-            mask = mask.cuda()
-        bsz = input_data1.shape[0]
+       
+        bsz = len(batched_data['action'])
 
-        # warm-up learning rate
-        # warmup_learning_rate(opt, epoch, idx, len(train_loader), optimizer)
-
-        output = model(input_data1, input_data2, input_data3, mask)
+        # Standard training
+        actions = batched_data['action']
+        labels = torch.tensor([int(item[1:]) - 1 for item in actions]).cuda()
+        output = model(batched_data)
 
 
         label_list.extend(labels.cpu().numpy())
         pred1_list.extend(output.max(1)[1].cpu().numpy())
         
         loss = criterion(output, labels)
+
+        output = softmax(output)
+
         # acc, rec, prec, target_positive, pred_positive = rate_eval(output, labels, opt.num_class, topk=(1, 5))
         acc, _ = accuracy(output, labels, topk=(1, 5))
         # print("Compare acc, rec:", acc, rec)
@@ -276,18 +292,13 @@ def validate(val_loader, model, criterion, opt):
 
     with torch.no_grad():
         end = time.time()
-        for idx, (input_data1, input_data2, input_data3, labels, mask) in enumerate(val_loader):
+        for idx, batched_data in enumerate(val_loader):
+        
+            bsz = len(batched_data['action'])
 
-            if torch.cuda.is_available():
-                input_data1 = input_data1.cuda()
-                input_data2 = input_data2.cuda()
-                input_data3 = input_data3.cuda()
-                labels = labels.cuda()
-                mask = mask.cuda()
-            bsz = labels.shape[0]
-
-            # forward
-            output = model(input_data1, input_data2, input_data3, mask)
+            actions = batched_data['action']
+            labels = torch.tensor([int(item[1:]) - 1 for item in actions]).cuda()
+            output = model(batched_data)
 
             label_list.extend(labels.cpu().numpy())
             pred_list.extend(output.max(1)[1].cpu().numpy())
@@ -352,16 +363,11 @@ def main():
     # optimizer = set_optimizer(opt, model)
 
     # build optimizer
-    optimizer = optim.Adam([ 
-                {'params': model.acc_encoder.parameters(), 'lr': 1e-4},   # 0
-                {'params': model.skeleton_encoder.parameters(), 'lr': 1e-4},   # 0
-                {'params': model.gyro_encoder.parameters(), 'lr': 1e-4},   # 0
-                {'params': model.classifier.parameters(), 'lr': opt.learning_rate}],
-                # momentum=opt.momentum,
+    optimizer = optim.Adam(model.parameters(), lr=opt.learning_rate,
                 weight_decay=opt.weight_decay)
 
     # tensorboard
-    # logger = tb_logger.Logger(logdir=opt.tb_folder, flush_secs=2)
+    #logger = tb_logger.Logger(logdir=opt.tb_folder, flush_secs=2)
 
     record_loss = np.zeros(opt.epochs)
     record_acc = np.zeros(opt.epochs)

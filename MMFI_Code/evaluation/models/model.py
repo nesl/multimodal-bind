@@ -13,16 +13,18 @@ import numpy as np
 class DepthEncoder(nn.Module):
     def __init__(self):
         super(DepthEncoder, self).__init__()
-        # Define CNN model, we have colorized depth images of 3 x 48 x 64
+        # Define CNN model, we have grayscale depth images of 1 x 48 x 64
         self.conv_layers = nn.Sequential(
-            nn.Conv2d(3, 16, (7, 7)),
+            nn.Conv2d(1, 16, (7, 7)),
             nn.Dropout(0.1),
             nn.MaxPool2d((2, 2)),
             nn.BatchNorm2d(16),
+            nn.ReLU(),
             nn.Conv2d(16, 16, (5, 5)),
             nn.Dropout(0.1),
             nn.MaxPool2d((2, 2)),
             nn.BatchNorm2d(16),
+            nn.ReLU(),
             nn.Conv2d(16, 16, (5, 5)),
             nn.Dropout(0.1),
             nn.MaxPool2d((2, 2))
@@ -46,19 +48,18 @@ class DepthEncoder(nn.Module):
        
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.pos_embeddings = self.pos_embeddings.to(device)
-        data = data['input_depth'].to(device)
+        data = data['input_depth'][:, 0:30].to(device)
 
         batch_size, n_frames, channels, dim1, dim2 = data.shape
 
         # Merge the number of frames and batches before undergoing the conv network
-        data = torch.squeeze(torch.reshape(data, (-1, channels, dim1, dim2)))
-        
+        data = torch.reshape(data, (-1, channels, dim1, dim2))
         # Reshape output to batch_size x num_frames x 128
         resnet_output = torch.reshape(torch.squeeze(self.conv_layers(data)), (batch_size, n_frames, -1))
         # Project to 64
         data = self.project_lin(resnet_output)
         # Add the positional embeddings, and place into transformer encoder
-        data += self.pos_embeddings
+        data += self.pos_embeddings[0:n_frames]
         data = self.time_encoder(data)
         # Return embedding in shape batch_size x 1920, note that normalization is done by the contrastive model
         output = torch.reshape(data, (batch_size, -1))
@@ -69,35 +70,45 @@ class DepthEncoder(nn.Module):
 # Original image size is 3 x 48 x 64 (we have 30 of them)
 class DepthReconstruct(nn.Module):
  
-    def __init__(self):
+    def __init__(self, mask_ratio=0.2):
         super(DepthReconstruct, self).__init__()
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         # Arbitrarily set the token size to be 512
-        dim=512
+        dim=64
+        self.project_lin = nn.Linear(dim, 128)
         # The idea is that we need to reconstruct 30 images of 3 x 48 x 64
         # This means we need (30 * 18) tokens of size 512 to get 276480 values, unsure if this is good
-        self.queries = nn.Parameter(torch.randn(30 * 18, dim))
+        #self.queries = nn.Parameter(torch.randn(30 * 6, dim))
+        self.mask_token = nn.Parameter(torch.randn(dim))
         # Decoder takes our encoded data as input, and uses it to write data to the queries
-        self.decoder = TransformerDec(dim=dim, depth=6, heads=2, dim_head=dim//2, mlp_dim=dim*3)
-        # Adapter is used to make sure it can output any data range (e.g., if transformer output is small it can remap it)
-        self.adapter = nn.Sequential(
-            nn.Linear(512, 512),
+        self.encoder = TransformerEnc(dim=dim, depth=6, heads=2, dim_head=dim//2, mlp_dim=dim*3)
+        self.deconv = nn.Sequential(
+            nn.ConvTranspose2d(16, 16, (7, 7), stride=(2, 2)),
             nn.ReLU(),
-            nn.Linear(512, 512)
+            nn.ConvTranspose2d(16, 16, (7, 7), stride=(2, 2)),
+            nn.ReLU(),
+            nn.ConvTranspose2d(16, 1, (4, 4), stride=(2, 2))
+
         )
-    # Input is b_size x 1920
-    def forward(self, depth_tokens):
-        # We have token size of 512, we can extract 3 tokens of 512 from our input
+
+
+    # Input is b_size x 1920 (30 x 64)
+    def forward(self, depth_tokens, mask):
+
         batch_size = depth_tokens.shape[0]
-        depth_tokens = depth_tokens[:, :1536]
-        # Reshape into three tokens
-        depth_tokens = torch.reshape(depth_tokens, (batch_size, -1, 512))
-        queries = repeat(self.queries, 'n d -> b n d', b=batch_size)
-        # Perform cross attn between our input data (3 tokens of 512) and our queries (520 tokens of 512)
-        decoder_out = self.decoder(queries, depth_tokens)
-        transformed_tokens = self.adapter(torch.reshape(decoder_out, (-1, 512)))
-        # Return image in correct format
-        return torch.reshape(transformed_tokens, (batch_size, -1, 3, 48, 64))
+        depth_tokens = torch.reshape(depth_tokens, (batch_size, 30, 64))
+        mask = torch.reshape(mask, (1, len(mask), 1))
+        mask_token = repeat(self.mask_token, 'd -> b n d', b=batch_size, n=30)
+        depth_tokens = depth_tokens * mask + mask_token * (1 - mask)
+
+        output = self.encoder(depth_tokens)
+        output = self.project_lin(output)
+        output = torch.reshape(output, (batch_size * 30, 16, 2, 4))
+        output = self.deconv(output)
+        return torch.reshape(output, (batch_size, 30, 48, 64))
+
+
+        
 
 class SkeletonEncoder(nn.Module):
     def __init__(self):
@@ -110,7 +121,7 @@ class SkeletonEncoder(nn.Module):
             nn.Linear(20, 16)
         )
         # Treat each data frame as one token as input to a transformer encoder
-        self.encoder = TransformerEnc(dim=d, depth=8, heads=4, dim_head=d//3, mlp_dim=3*d)
+        self.encoder = TransformerEnc(dim=d, depth=12, heads=4, dim_head=d//3, mlp_dim=3*d) # Previously 8
         # Positional embeddings
         positions = torch.arange(0, 30).unsqueeze_(1)
         self.pos_embeddings = torch.zeros(30, d)
@@ -143,10 +154,8 @@ class SkeletonReconstruct(nn.Module):
         dim=34
         # 30 tokens to reconstruct
         self.queries = nn.Parameter(torch.randn(30, dim))
-        self.decoder = TransformerDec(dim=dim, depth=6, heads=2, dim_head=dim//2, mlp_dim=dim*3)
+        self.decoder = TransformerDec(dim=dim, depth=100, heads=4, dim_head=dim//4, mlp_dim=dim*3) # Was 6
         self.adapter = nn.Sequential(
-            nn.Linear(34, 34),
-            nn.ReLU(),
             nn.Linear(34, 34)
         )
     # skeleton encoder output is batch_size x 480
@@ -323,6 +332,7 @@ class mmWaveDepthSupervised(nn.Module):
         cls = repeat(self.cls, '1 1 n -> b 1 n', b=batch_size)
         # Concatenate, 61 (1 cls + 30 mmwave + 30 depth) tokens total
         combined_output = torch.cat((cls, mmWave_output, depth_output), dim=1)
+        #combined_output = torch.cat((cls, depth_output), dim=1)
         cls_out = self.combine_features(combined_output)[:, 0] # Get only CLS and use for classification
         return self.output_head(cls_out)
     

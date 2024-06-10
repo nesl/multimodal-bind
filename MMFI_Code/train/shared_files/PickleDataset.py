@@ -218,7 +218,7 @@ class PickleDataset(Dataset):
         item = self.data_list[idx]
         chopIndex = item['gt_path'].rindex('/')
         data_path = item['gt_path'][:chopIndex]
-
+        
         # Load pickle fle at the file path
         with open(data_path + '/data.pickle', 'rb') as handle:
             data = pickle.load(handle)
@@ -240,12 +240,8 @@ class PickleDataset(Dataset):
             data['input_rgb'] /= STD_RGB
         # For depth, we downsample from 240 x 320 to 48 x 64
         if 'input_depth' in data.keys():
-            data['input_depth'] = np.reshape(data['input_depth'], (-1, 240, 320))
-            data['input_depth'] = np.transpose(data['input_depth'], (1, 2, 0))
-            data['input_depth'] = cv2.resize(data['input_depth'], (0, 0), fx=0.2, fy=0.2, interpolation=cv2.INTER_AREA)
-            
-            data['input_depth'] = np.transpose(data['input_depth'], (2, 0, 1))
-            data['input_depth'] = np.reshape(data['input_depth'], (-1, 3, 48, 64))
+            data['input_depth'] = data['input_depth'][0:30]
+            data['input_depth'] = np.expand_dims(data['input_depth'], axis=1)
     
 
         return data

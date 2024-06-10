@@ -183,7 +183,7 @@ def set_model(opt):
     model = model_lib.mmWaveDepthSupervised()
     criterion = torch.nn.CrossEntropyLoss()
     model_template = model_lib.mmWaveDepthContrastive() # TODO changed this
-    checkpoint = '../train/save_mmbind/save_train_all_paired_AB_contrastive_no_pretrain/models/lr_0.0001_decay_0.0001_bsz_64/last.pth'
+    checkpoint = '../train/save_mmbind/save_train_all_paired_AB_contrastive_no_pretrain/models/lr_0.0005_decay_0.0001_bsz_64/last.pth'
     model_template.load_state_dict(torch.load(checkpoint)['model'])
     # Copy the model weights between the two models, TODO use pdb to verify that the weights are correctly loaded
     model.depth_encoder = model_template.depth_encoder

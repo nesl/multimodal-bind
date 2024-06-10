@@ -11,7 +11,6 @@ import torch
 import torch.backends.cudnn as cudnn
 # from torchvision import transforms, datasets
 
-
 import numpy as np
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import f1_score
@@ -19,13 +18,13 @@ from sklearn.metrics import f1_score
 from shared_files.util import AverageMeter
 from shared_files.util import adjust_learning_rate, warmup_learning_rate, accuracy
 from shared_files.util import set_optimizer, save_model
-from shared_files import data_pre as data
 
-from models.fuse_acc_gyro import MyUTDmodel_IMU
 from shared_files.contrastive_design import FeatureConstructor, ConFusionLoss
 
-
-# TODO UNSURE ABOUT THIS
+from shared_files.PickleDataset import make_dataset
+from models.model import mmWaveDepthContrastive
+from torch.utils.data import ConcatDataset
+import yaml
 
 try:
     import apex
@@ -33,6 +32,35 @@ try:
 except ImportError:
     pass
 
+
+def collate_fn_padd(batch):
+    '''
+    Padds batch of variable length
+    '''
+
+    batch_data = {'modality': batch[0]['modality'],
+                  'data_path': [sample['data_path'] for sample in batch],
+                  'scene': [sample['scene'] for sample in batch],
+                  'subject': [sample['subject'] for sample in batch],
+                  'action': [sample['action'] for sample in batch],
+                  'idx': [sample['idx'] for sample in batch] if 'idx' in batch[0] else None
+                  }
+    _output = [np.array(sample['output']) for sample in batch]
+    _output = torch.FloatTensor(np.array(_output))
+    batch_data['output'] = _output
+
+    for mod in batch_data['modality']:
+        if mod in ['mmwave', 'lidar']:
+            _input = [torch.Tensor(sample['input_' + mod]) for sample in batch]
+            _input = torch.nn.utils.rnn.pad_sequence(_input)
+            _input = _input.permute(1, 2, 0, 3)
+            batch_data['input_' + mod] = _input
+        else:
+            _input = [np.array(sample['input_' + mod]) for sample in batch]
+            _input = torch.FloatTensor(np.array(_input))
+            batch_data['input_' + mod] = _input
+
+    return batch_data
 
 def parse_option():
     parser = argparse.ArgumentParser('argument for training')
@@ -49,7 +77,7 @@ def parse_option():
                         help='number of training epochs')
 
     # optimization
-    parser.add_argument('--learning_rate', type=float, default=1e-3,
+    parser.add_argument('--learning_rate', type=float, default=1e-4,
                         help='learning rate')
     parser.add_argument('--momentum', type=float, default=0.9,
                         help='momentum')
@@ -62,14 +90,14 @@ def parse_option():
 
     # model dataset
     parser.add_argument('--model', type=str, default='MyUTDmodel')
-    parser.add_argument('--dataset', type=str, default='train_A',
-                        choices=['train_A', 'train_B', 'train_AB'], help='dataset')
+    parser.add_argument('--dataset', type=str, default='train_AB', 
+                        choices=['train_AB', 'train_A', 'train_B'], help='dataset')
+    parser.add_argument('--load_pretrain', type=str, default='no_pretrain', help='load_pretrain')
     parser.add_argument('--num_class', type=int, default=27,
                         help='num_class')
     # temperature
     parser.add_argument('--temp', type=float, default=0.07,
                         help='temperature for loss function')
-    parser.add_argument('--load_pretrain', type=str, default='load_self_AE_pretrain', help='load_pretrain')
 
     # other setting
     parser.add_argument('--cosine', action='store_true',
@@ -81,13 +109,13 @@ def parse_option():
     parser.add_argument('--trial', type=str, default='0',
                         help='id for recording multiple runs')
     parser.add_argument('--seed', type=int, default=100)
+    
     opt = parser.parse_args()
-
     torch.manual_seed(opt.seed)
     np.random.seed(opt.seed)
 
     # set the path according to the environment
-    opt.save_path = "./save_upper_bound/save_{}_contrastive_{}/".format(opt.dataset, opt.load_pretrain)
+    opt.save_path = "./save_upper_bound/"
     opt.model_path = opt.save_path + 'models'
     opt.tb_path = opt.save_path + 'tensorboard'
     opt.result_path = opt.save_path + 'results/'
@@ -133,55 +161,34 @@ def parse_option():
 
 def set_loader(opt):
 
-    #load labeled train and test data
-    print("train data:")
-    if opt.dataset == "train_AB":
-        x_train_label_1, x_train_label_2, y_train = data.load_all_data_IMU()
+    # We utilize different config files for paired contrastive with all modalities
+    if opt.dataset == "train_A":
+        print("train paired data:")
+        with open('../Configs/config_train_A_Contrastive.yaml', 'r') as handle:
+            config_train = yaml.load(handle, Loader=yaml.FullLoader)
+            train_dataset, _ = make_dataset('../../MMFI_Dataset/', config_train)
+    elif opt.dataset == "train_B":
+        print("train paired data:")
+        with open('../Configs/config_train_B_Contrastive.yaml', 'r') as handle:
+            config_train = yaml.load(handle, Loader=yaml.FullLoader)
+            train_dataset, _ = make_dataset('../../MMFI_Dataset/', config_train)
+    elif opt.dataset == "train_AB":
+        print("train paired data:")
+        with open('../Configs/config_train_AB_Contrastive.yaml', 'r') as handle:
+            config_train = yaml.load(handle, Loader=yaml.FullLoader)
+            train_dataset, _ = make_dataset('../../MMFI_Dataset/', config_train)
+        
     else:
-        x_train_label_1, x_train_label_2, y_train = data.load_data_IMU(opt.dataset)
-
-    train_dataset = data.Multimodal_dataset(x_train_label_1, x_train_label_2, y_train)
-
+        raise Exception('invalid training dataset')
+    
     train_loader = torch.utils.data.DataLoader(
-        train_dataset, batch_size=opt.batch_size,
+        train_dataset, batch_size=opt.batch_size, collate_fn = collate_fn_padd,
         num_workers=opt.num_workers, pin_memory=True, shuffle=True, drop_last=True)
-
     return train_loader
 
-
-def load_single_modal(opt, modality):
-
-    if opt.load_pretrain == "load_pretrain":
-        if modality == 'acc':
-            opt.ckpt = './save_baseline1/save_train_A_autoencoder/models/lr_0.0001_decay_0.0001_bsz_64/'
-        else:
-            opt.ckpt = './save_baseline1/save_train_B_autoencoder/models/lr_0.0001_decay_0.0001_bsz_64/'
-    elif opt.load_pretrain == "load_self_AE_pretrain":
-        opt.ckpt = './save_upper_bound/unimodal_pretrain/save_{}_{}_autoencoder/models/lr_0.0001_decay_0.0001_bsz_64/'.format(opt.dataset, modality)
-
-    ckpt_path = opt.ckpt + 'last.pth'
-    ckpt = torch.load(ckpt_path, map_location='cpu')
-    state_dict = ckpt['model']
-
-    if modality == "acc":
-        layer_key = 'acc_encoder.'
-    else:
-        layer_key = 'gyro_encoder.'
-    new_state_dict = {}
-    for k, v in state_dict.items():
-        if layer_key in k:
-            k = k.replace(layer_key, "")
-            if torch.cuda.is_available():
-                k = k.replace("module.", "")
-            new_state_dict[k] = v
-    state_dict = new_state_dict
-
-    return state_dict
-
-
 def set_model(opt):
-
-    model = MyUTDmodel_IMU(input_size=1, num_classes=opt.num_class)
+    # This model takes mmWave and depth, returns 128 contrastive features
+    model = mmWaveDepthContrastive()
     criterion = ConFusionLoss(temperature=opt.temp)
 
     # enable synchronized Batch Normalization
@@ -194,10 +201,6 @@ def set_model(opt):
         model = model.cuda()
         criterion = criterion.cuda()
         cudnn.benchmark = True
-
-    if (opt.load_pretrain == "load_pretrain") or (opt.load_pretrain == "load_self_AE_pretrain"):
-        model.acc_encoder.load_state_dict(load_single_modal(opt, 'acc'))
-        model.gyro_encoder.load_state_dict(load_single_modal(opt, 'gyro'))
 
 
     return model, criterion
@@ -213,19 +216,18 @@ def train(train_loader, model, criterion, optimizer, epoch, opt):
 
     end = time.time()
 
-    for idx, (input_data1, input_data2, similarity) in enumerate(train_loader):
+    for idx, batched_data in enumerate(train_loader):
+
         data_time.update(time.time() - end)
 
-        if torch.cuda.is_available():
-            input_data1 = input_data1.cuda()
-            input_data2 = input_data2.cuda()
-        bsz = input_data1.shape[0]
+        
 
         # warm-up learning rate
         # warmup_learning_rate(opt, epoch, idx, len(train_loader), optimizer)
 
-        feature1, feature2 = model(input_data1, input_data2)
+        feature1, feature2 = model(batched_data)
         
+        bsz = feature1.shape[0]
         features = FeatureConstructor(feature1, feature2, 2)
 
         loss = criterion(features)

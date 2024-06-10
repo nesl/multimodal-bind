@@ -177,7 +177,7 @@ def set_loader(opt):
     train_loader = torch.utils.data.DataLoader(
         train_dataset, batch_size=opt.batch_size, num_workers=opt.num_workers,
          collate_fn=collate_fn_padd, pin_memory=True, shuffle=True)
- 
+    #
     val_loader = torch.utils.data.DataLoader(
         val_dataset, batch_size=opt.batch_size, num_workers=opt.num_workers,
         collate_fn=collate_fn_padd, pin_memory=True, shuffle=True)

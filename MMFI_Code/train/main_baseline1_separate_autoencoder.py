@@ -91,7 +91,7 @@ def parse_option():
     # model dataset
     parser.add_argument('--model', type=str, default='MyUTDmodel')
     # TODO changed
-    parser.add_argument("--train_config", type=str, default="train_A", help="Configuration YAML file") # Provide either train_A or train_B
+    parser.add_argument("--dataset", type=str, default="train_A", help="Configuration YAML file") # Provide either train_A or train_B
     parser.add_argument('--num_class', type=int, default=27,
                         help='num_class')
 
@@ -112,12 +112,12 @@ def parse_option():
     np.random.seed(opt.seed)
 
     # set the path according to the environment
-    opt.save_path = './save_baseline1/save_{}_autoencoder/'.format(opt.train_config)
+    opt.save_path = './save_baseline1/save_{}_autoencoder/'.format(opt.dataset)
     opt.model_path = opt.save_path + 'models'
     opt.tb_path = opt.save_path + 'tensorboard'
     opt.result_path = opt.save_path + 'results/'
     # Convert the input dataset into the config file name
-    opt.train_path = '../Configs/config_' + opt.train_config + '.yaml'
+    opt.train_path = '../Configs/config_' + opt.dataset + '.yaml'
 
     iterations = opt.lr_decay_epochs.split(',')
     opt.lr_decay_epochs = list([])
@@ -179,11 +179,11 @@ def set_loader(opt):
 def set_model(opt):
     # Create appropriate model depending on what we're trainng
     # Dataset A is for depth, dataset B is for mmWave
-    if (opt.train_config == 'train_A'):
+    if (opt.dataset == 'train_A'):
         print("Currently training depth model in dataset A")
         model_encoder = model_lib.DepthEncoder()
         model_decoder = model_lib.DepthReconstruct()
-    elif (opt.train_config == 'train_B'):
+    elif (opt.dataset == 'train_B'):
         print("Curently training mmWave on dataset B")
         model_encoder = model_lib.mmWaveEncoder()
         model_decoder = model_lib.mmWaveReconstruct()
@@ -209,7 +209,7 @@ def set_model(opt):
 
 def train(train_loader, model_encoder, model_decoder, criterion, optimizer, epoch, opt):
     """one epoch training"""
-    curr_mod = 'input_depth' if opt.train_config == 'train_A' else 'input_mmwave'
+    curr_mod = 'input_depth' if opt.dataset == 'train_A' else 'input_mmwave'
     model_encoder.train()
     model_decoder.train()
 

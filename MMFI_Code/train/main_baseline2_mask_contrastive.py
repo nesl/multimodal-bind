@@ -10,21 +10,24 @@ import math
 import torch
 import torch.backends.cudnn as cudnn
 # from torchvision import transforms, datasets
+from torch.utils.data import DataLoader, ConcatDataset
 
 import numpy as np
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import f1_score
 
-
 from shared_files.util import AverageMeter
 from shared_files.util import adjust_learning_rate, warmup_learning_rate, accuracy
 from shared_files.util import set_optimizer, save_model
-from shared_files import data_pre as data
 
-from models.fuse_acc_gyro_skeleton import MyUTDmodel_3M
 from shared_files.contrastive_design_3M import FeatureConstructor, ConFusionLoss
+import yaml
+import models.model as model_lib
+from shared_files.PickleDataset import make_dataset
+from torch.utils.data import ConcatDataset
 
-# BASELINE 2 IS NOT DONE, not too familiar with this to start making big changes
+
+
 
 try:
     import apex
@@ -32,6 +35,38 @@ try:
 except ImportError:
     pass
 
+def collate_fn_padd(batch):
+    '''
+    Padds batch of variable length
+    '''
+
+    for i in range(len(batch)):
+        if ('input_depth' not in batch[i].keys()):
+            batch[i]['input_depth'] = torch.full((30, 1, 48, 64), -1.1)
+        if ('input_mmwave' not in batch[i].keys()):
+            batch[i]['input_mmwave'] = torch.full((1, 297, 5), -1.1)
+
+    batch_data = {'modality': [batch[i]['modality'] for i in range(len(batch))],
+                    'scene': [sample['scene'] for sample in batch],
+                    'subject': [sample['subject'] for sample in batch],
+                    'action': [sample['action'] for sample in batch],
+                    'idx': [sample['idx'] for sample in batch] if 'idx' in batch[0] else None
+                    }
+    _output = [np.array(sample['output']) for sample in batch]
+    _output = torch.FloatTensor(np.array(_output))
+    batch_data['output'] = _output
+
+    for mod in ['mmwave', 'depth', 'rgb']:
+        if mod in ['mmwave', 'lidar']:
+            _input = [torch.Tensor(sample['input_' + mod]) for sample in batch]
+            _input = torch.nn.utils.rnn.pad_sequence(_input)
+            _input = _input.permute(1, 2, 0, 3)
+            batch_data['input_' + mod] = _input
+        else:
+            _input = [np.array(sample['input_' + mod]) for sample in batch]
+            _input = torch.FloatTensor(np.array(_input))
+            batch_data['input_' + mod] = _input
+    return batch_data
 
 def parse_option():
     parser = argparse.ArgumentParser('argument for training')
@@ -68,7 +103,7 @@ def parse_option():
     # temperature
     parser.add_argument('--temp', type=float, default=0.07,
                         help='temperature for loss function')
-    parser.add_argument('--load_pretrain', type=str, default='no_load', help='load_pretrain')
+    parser.add_argument('--load_pretrain', type=str, default='no_pretrain', help='load_pretrain')
 
     # other setting
     parser.add_argument('--cosine', action='store_true',
@@ -134,55 +169,36 @@ def parse_option():
 
 def set_loader(opt):
 
-    #load labeled train and test data
-    print("train data:")
-    if opt.dataset == "train_AB":
-        x_train_1, x_train_2, x_train_3, y_train, mask_train = data.load_all_data_incomplete()
-    else:
-        x_train_1, x_train_2, x_train_3, y_train, mask_train = data.load_data_incomplete(opt.dataset)
+    # We load both trainA and trainB config file data
+    if (opt.dataset == 'train_A'):
+        with open('../Configs/config_train_A.yaml', 'r') as handle:
+            config_train = yaml.load(handle, Loader=yaml.FullLoader)
+        train_dataset, _ = make_dataset('../../MMFI_Dataset/', config_train)
 
-    train_dataset = data.Multimodal_incomplete_dataset(x_train_1, x_train_2, x_train_3, y_train, mask_train)
-
+    elif (opt.dataset == 'train_B'):
+        with open('../Configs/config_train_B.yaml', 'r') as handle:
+            config_train = yaml.load(handle, Loader=yaml.FullLoader)
+        train_dataset, _ = make_dataset('../../MMFI_Dataset/', config_train)
+    elif (opt.dataset == 'train_AB'):
+        with open('../Configs/config_train_A.yaml', 'r') as handle:
+            config_train = yaml.load(handle, Loader=yaml.FullLoader)
+        train_datasetA, _ = make_dataset('../../MMFI_Dataset/', config_train)
+        with open('../Configs/config_train_B.yaml', 'r') as handle:
+            config_train = yaml.load(handle, Loader=yaml.FullLoader)
+        train_datasetB, _ = make_dataset('../../MMFI_Dataset/', config_train)
+        train_dataset = ConcatDataset([train_datasetA, train_datasetB])
+    
+    # Return single train loader
     train_loader = torch.utils.data.DataLoader(
-        train_dataset, batch_size=opt.batch_size,
-        num_workers=opt.num_workers, pin_memory=True, shuffle=True, drop_last=True)
-
+        train_dataset, batch_size=opt.batch_size, num_workers=opt.num_workers,
+         collate_fn=collate_fn_padd, pin_memory=True, shuffle=True)
     return train_loader
-
-
-def load_single_modal(opt, modality):
-
-    if opt.load_pretrain == "load_pretrain":
-        if modality == 'acc':
-            opt.ckpt = './save_baseline1/save_train_A_autoencoder/models/lr_0.0001_decay_0.0001_bsz_64/'
-        else:
-            opt.ckpt = './save_baseline1/save_train_B_autoencoder/models/lr_0.0001_decay_0.0001_bsz_64/'
-    # elif opt.load_pretrain == "load_self_AE_pretrain":
-    #     opt.ckpt = './unimodal_pretrain/save_{}_{}_autoencoder/models/lr_0.0001_decay_0.0001_bsz_64/'.format(opt.dataset, modality)
-
-    ckpt_path = opt.ckpt + 'last.pth'
-    ckpt = torch.load(ckpt_path, map_location='cpu')
-    state_dict = ckpt['model']
-
-    if modality == "acc":
-        layer_key = 'acc_encoder.'
-    else:
-        layer_key = 'gyro_encoder.'
-    new_state_dict = {}
-    for k, v in state_dict.items():
-        if layer_key in k:
-            k = k.replace(layer_key, "")
-            if torch.cuda.is_available():
-                k = k.replace("module.", "")
-            new_state_dict[k] = v
-    state_dict = new_state_dict
-
-    return state_dict
 
 
 def set_model(opt):
 
-    model = MyUTDmodel_3M(input_size=1, num_classes=opt.num_class)
+    model = model_lib.DualContrastiveModel()
+
     criterion = ConFusionLoss(temperature=opt.temp)
 
     # enable synchronized Batch Normalization
@@ -195,7 +211,6 @@ def set_model(opt):
         model = model.cuda()
         criterion = criterion.cuda()
         cudnn.benchmark = True
-
 
     return model, criterion
 
@@ -210,24 +225,16 @@ def train(train_loader, model, criterion, optimizer, epoch, opt):
 
     end = time.time()
 
-    for idx, (input_data1, input_data2, input_data3, label, mask) in enumerate(train_loader):
+    for idx, batched_data in enumerate(train_loader):
         data_time.update(time.time() - end)
 
-        if torch.cuda.is_available():
-            input_data1 = input_data1.cuda()
-            input_data2 = input_data2.cuda()
-            input_data3 = input_data3.cuda()
-            label = label.cuda()
-            mask = mask.cuda()
-        bsz = input_data1.shape[0]
+        bsz = batched_data['input_rgb'].shape[0]
 
-        # warm-up learning rate
-        # warmup_learning_rate(opt, epoch, idx, len(train_loader), optimizer)
-
-        feature1, feature2, feature3 = model(input_data1, input_data2, input_data3, mask)
+        # Model returns three adapted embeddings (depth, mmwave, skeleton), input is entire dict
+        depth_features, mmwave_features, skeleton_features = model(batched_data)
         
-        features = FeatureConstructor(feature1, feature2, feature3, 2)
-
+        # Perform contrastive learning
+        features = FeatureConstructor(skeleton_features, depth_features, mmwave_features, 3)
         loss = criterion(features)
         losses.update(loss.item(), bsz)
 
