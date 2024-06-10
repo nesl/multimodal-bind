@@ -149,10 +149,10 @@ def main():
 
         record_loss[epoch-1] = loss
 
-        if epoch % opt.save_freq == 0:
-            save_file = os.path.join(
-                opt.save_folder, 'ckpt_epoch_{epoch}.pth'.format(epoch=epoch))
-            save_model(model, optimizer, opt, epoch, save_file)
+        # if epoch % opt.save_freq == 0:
+        #     save_file = os.path.join(
+        #         opt.save_folder, 'ckpt_epoch_{epoch}.pth'.format(epoch=epoch))
+        #     save_model(model, optimizer, opt, epoch, save_file)
 
         pprint(f"Epoch {epoch} - Loss: {loss}")
 

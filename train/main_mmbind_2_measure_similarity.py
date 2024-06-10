@@ -136,11 +136,11 @@ def set_model(opt):
     model_template= SingleIMUAutoencoder(mod)
 
     if mod == "acc":
-        weight = "./save_mmbind/save_train_AB_acc_autoencoder_no_load/models/lr_0.005_decay_0.0001_bsz_64"
+        weight = f"./save_mmbind/save_train_AB_unimod_autoencoder_no_load_acc_{opt.seed}_{opt.data_split}/models/lr_0.005_decay_0.0001_bsz_64"
     elif mod == "gyro":
-        weight = "./save_mmbind/save_train_AB_unimod_autoencoder_no_load_gyro/models/lr_0.0001_decay_0.0001_bsz_64"
+        weight = f"./save_mmbind/save_train_AB_unimod_autoencoder_no_load_gyro_{opt.seed}_{opt.data_split}/models/lr_0.0001_decay_0.0001_bsz_64"
     elif mod == "mag":
-        weight = "./save_mmbind/save_train_AB_unimod_autoencoder_no_load_mag/models/lr_0.0001_decay_0.0001_bsz_64"
+        weight = f"./save_mmbind/save_train_AB_unimod_autoencoder_no_load_mag_{opt.seed}_{opt.data_split}/models/lr_0.0001_decay_0.0001_bsz_64"
     else:
         raise Exception(f"Invalid modality {mod}")
     model_template.load_state_dict(torch.load(os.path.join(weight, "last.pth"))['model'])
@@ -233,7 +233,7 @@ def main():
         search_label = label_A
         search_path = paths_A
 
-    save_paired_path = f"./save_mmbind/train_{opt.reference_modality}_paired_AB_{opt.common_modality}/"
+    save_paired_path = f"./save_mmbind/train_{opt.reference_modality}_paired_AB_{opt.common_modality}_{opt.seed}_{opt.dataset_split}/"
 
     if not os.path.isdir(save_paired_path):
         os.makedirs(save_paired_path)
