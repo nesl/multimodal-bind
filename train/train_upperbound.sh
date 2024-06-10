@@ -12,3 +12,6 @@ python3 main_upper_bound_2_fuse_contrastive.py --seed 123 --common_modality mag
 # python3 main_fuse_sup_upper_bound.py --seed $1
 # cd save_train_C/label_216/upper_bound/results
 # mv test_accuracy.txt test_accuracy_${1}.txt
+
+cd ../evaluation
+bash eval_upperbound.sh

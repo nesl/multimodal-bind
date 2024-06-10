@@ -8,3 +8,6 @@ python3 main_baseline1_separate_autoencoder.py --common_modality gyro --dataset 
 
 python3 main_baseline1_separate_autoencoder.py --common_modality mag --dataset train_A
 python3 main_baseline1_separate_autoencoder.py --common_modality mag --dataset train_B
+
+cd ../evaluation
+bash eval_baseline1.sh
