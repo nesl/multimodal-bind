@@ -62,8 +62,8 @@ def set_model(opt):
     
     model_template = SingleIMUAutoencoder('mag') # any mod should be ok
 
-    mod1_weight = f"../train/save_baseline1/save_train_A_autoencoder_no_load_{mod1}/models/lr_0.0001_decay_0.0001_bsz_64/last.pth"
-    mod2_weight = f"../train/save_baseline1/save_train_B_autoencoder_no_load_{mod2}/models/lr_0.0001_decay_0.0001_bsz_64/last.pth"
+    mod1_weight = f"../train/save_baseline1/save_train_A_autoencoder_no_load_{mod1}_{opt.seed}_{opt.dataset_split}/models/lr_0.0001_decay_0.0001_bsz_64/last.pth"
+    mod2_weight = f"../train/save_baseline1/save_train_B_autoencoder_no_load_{mod2}_{opt.seed}_{opt.dataset_split}/models/lr_0.0001_decay_0.0001_bsz_64/last.pth"
 
     pprint(f"=\tLoad {mod1} weight from {mod1_weight}")
     pprint(f"=\tLoad {mod2} weight from {mod2_weight}")

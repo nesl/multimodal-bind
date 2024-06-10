@@ -67,7 +67,7 @@ def set_model(opt):
         model = SupervisedAccGyro()
 
 
-    model_weight = f"../train/save_dual_contrastive/save_train_AB_contrastive_no_load_{mod}_123/models/lr_0.0001_decay_0.0001_bsz_64/last.pth"
+    model_weight = f"../train/save_dual_contrastive/save_train_AB_contrastive_no_load_{mod}_{opt.seed}_{opt.dataset_split}/models/lr_0.0001_decay_0.0001_bsz_64/last.pth"
 
     pprint(f"Loading weight from {model_weight}")
     print(f"=\tLoading weight from {model_weight}")

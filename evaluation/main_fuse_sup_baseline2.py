@@ -66,7 +66,7 @@ def set_model(opt):
     # model_template = SingleIMUAutoencoder('mag') # any mod should be ok
     model_template = FullIMUEncoder()
 
-    weight = f"../train/save_baseline2/save_train_AB_mask_contrastive_no_load_{mod}/models/lr_0.0001_decay_0.0001_bsz_64/last.pth"
+    weight = f"../train/save_baseline2/save_train_AB_mask_contrastive_no_load_{mod}_{opt.seed}_{opt.dataset_split}/models/lr_0.0001_decay_0.0001_bsz_64/last.pth"
     # weight = f"../train/save_baseline2/save_train_AB_mask_contrastive_no_load/models/lr_0.0001_decay_0.0001_bsz_64/last.pth"
     pprint(f"=\tLoad {mod} (masked) weight from {weight}")
     model_template.load_state_dict(torch.load(weight)['model'])
