@@ -4,4 +4,4 @@ python3 main_baseline2_mask_contrastive.py --seed $1 --common_modality gyro --gp
 python3 main_baseline2_mask_contrastive.py --seed $1 --common_modality mag --gpu 3
 
 cd ../evaluation
-bash eval_baseline2.sh
+bash eval_baseline2.sh $1

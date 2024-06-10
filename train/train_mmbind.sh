@@ -53,4 +53,4 @@ python3 main_mmbind_3_fuse_contrastive.py --seed $1 --common_modality gyro
 python3 main_mmbind_3_fuse_contrastive.py --seed $1 --common_modality mag
 
 cd ../evaluation
-bash eval.sh
+bash eval.sh $1

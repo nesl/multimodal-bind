@@ -4,4 +4,4 @@ python3 main_dualcontrastive_1_train_contrastive.py --seed $1 --common_modality 
 python3 main_dualcontrastive_1_train_contrastive.py --seed $1 --common_modality mag --gpu 3
 
 cd ../evaluation
-bash eval_dual.sh
+bash eval_dual.sh $1

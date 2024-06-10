@@ -10,4 +10,4 @@ python3 main_baseline1_separate_autoencoder.py --seed $1 --common_modality mag -
 python3 main_baseline1_separate_autoencoder.py --seed $1 --common_modality mag --dataset train_B
 
 cd ../evaluation
-bash eval_baseline1.sh
+bash eval_baseline1.sh $1
