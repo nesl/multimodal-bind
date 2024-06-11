@@ -49,9 +49,9 @@ def set_model(opt):
 
     model_template = ModEncoder()
 
-    common_acc_weight = f"../train/save_mmbind/save_train_AB_contrastive_no_load_acc_{opt.seed}_{opt.dataset_split}/models/lr_5e-05_decay_0.0001_bsz_64/last.pth"
-    common_gyro_weight = f"../train/save_mmbind/save_train_AB_contrastive_no_load_gyro_{opt.seed}_{opt.dataset_split}/models/lr_5e-05_decay_0.0001_bsz_64/last.pth"
-    common_mag_weight = f"../train/save_mmbind/save_train_AB_contrastive_no_load_mag_{opt.seed}_{opt.dataset_split}/models/lr_5e-05_decay_0.0001_bsz_64/last.pth"
+    common_acc_weight = f"../train/save_mmbind/save_train_AB_contrastive_no_load_acc_{opt.seed}_{opt.dataset_split}/models/lr_0.0001_decay_0.0001_bsz_64/last.pth"
+    common_gyro_weight = f"../train/save_mmbind/save_train_AB_contrastive_no_load_gyro_{opt.seed}_{opt.dataset_split}/models/lr_0.0001_decay_0.0001_bsz_64/last.pth"
+    common_mag_weight = f"../train/save_mmbind/save_train_AB_contrastive_no_load_mag_{opt.seed}_{opt.dataset_split}/models/lr_0.0001_decay_0.0001_bsz_64/last.pth"
 
     if opt.common_modality == 'acc':
         weight = common_acc_weight

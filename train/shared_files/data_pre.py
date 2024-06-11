@@ -40,10 +40,13 @@ class Multimodal_dataset():
 		for file in sorted(index_files):
 			if file[-4:] != ".npy":
 				continue
-			
+
 			file_name = root + file if "train_all_paired_AB" in root else os.path.join(opt.processed_data_path, file)
 			self.data_arr.append(np.load(file_name, allow_pickle=True))
-			self.labels.append(int(file.split('_')[1]))
+			if "train_all_paired_AB" in root:
+				self.labels.append(int(file.split('_')[0]))
+			else:
+				self.labels.append(int(file.split('_')[1]))
 			self.file_names.append(os.path.abspath(file_name))
 		self.data_arr = np.array(self.data_arr)
 		self.labels = np.array(self.labels)

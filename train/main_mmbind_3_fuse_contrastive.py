@@ -27,7 +27,7 @@ def set_loader(opt):
     print(f"=\tInitializing Dataloader")
     #load labeled train and test data
 
-    dataset = f"./save_mmbind/train_all_paired_AB_{opt.common_modality}/"
+    dataset = f"./save_mmbind/train_all_paired_AB_{opt.common_modality}_{opt.seed}_{opt.dataset_split}/"
     pprint(f"=\tLoading dataset from {dataset}")
     print(f"=\tLoading dataset from {dataset}")
     train_dataset = data.Multimodal_dataset([], ['acc', 'gyro', 'mag'], root=dataset)

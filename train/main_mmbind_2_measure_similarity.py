@@ -126,7 +126,7 @@ def set_loader(opt):
 
     return train_loader_A, train_loader_B
 
-
+# ./save_mmbind/save_train_AB_unimod_autoencoder_no_load_acc_41_split_0/models/lr_0.005_de
 
 def set_model(opt):
 
@@ -136,11 +136,11 @@ def set_model(opt):
     model_template= SingleIMUAutoencoder(mod)
 
     if mod == "acc":
-        weight = f"./save_mmbind/save_train_AB_unimod_autoencoder_no_load_acc_{opt.seed}_{opt.data_split}/models/lr_0.005_decay_0.0001_bsz_64"
+        weight = f"./save_mmbind/save_train_AB_unimod_autoencoder_no_load_acc_{opt.seed}_{opt.dataset_split}/models/lr_0.0001_decay_0.0001_bsz_64"
     elif mod == "gyro":
-        weight = f"./save_mmbind/save_train_AB_unimod_autoencoder_no_load_gyro_{opt.seed}_{opt.data_split}/models/lr_0.0001_decay_0.0001_bsz_64"
+        weight = f"./save_mmbind/save_train_AB_unimod_autoencoder_no_load_gyro_{opt.seed}_{opt.dataset_split}/models/lr_0.0001_decay_0.0001_bsz_64"
     elif mod == "mag":
-        weight = f"./save_mmbind/save_train_AB_unimod_autoencoder_no_load_mag_{opt.seed}_{opt.data_split}/models/lr_0.0001_decay_0.0001_bsz_64"
+        weight = f"./save_mmbind/save_train_AB_unimod_autoencoder_no_load_mag_{opt.seed}_{opt.dataset_split}/models/lr_0.0001_decay_0.0001_bsz_64"
     else:
         raise Exception(f"Invalid modality {mod}")
     model_template.load_state_dict(torch.load(os.path.join(weight, "last.pth"))['model'])
