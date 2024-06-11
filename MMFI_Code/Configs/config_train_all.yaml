@@ -1,4 +1,4 @@
-modality: mmwave|depth
+modality: mmwave|depth|rgb
 
 protocol: protocol1
 

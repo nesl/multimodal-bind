@@ -15,25 +15,30 @@ class DepthEncoder(nn.Module):
         super(DepthEncoder, self).__init__()
         # Define CNN model, we have grayscale depth images of 1 x 48 x 64
         self.conv_layers = nn.Sequential(
-            nn.Conv2d(1, 16, (7, 7)),
+            nn.Conv2d(1, 32, (7, 7)),
             nn.Dropout(0.1),
             nn.MaxPool2d((2, 2)),
-            nn.BatchNorm2d(16),
+            nn.BatchNorm2d(32),
             nn.ReLU(),
-            nn.Conv2d(16, 16, (5, 5)),
+            nn.Conv2d(32, 64, (5, 5)),
             nn.Dropout(0.1),
             nn.MaxPool2d((2, 2)),
-            nn.BatchNorm2d(16),
+            nn.BatchNorm2d(64),
             nn.ReLU(),
-            nn.Conv2d(16, 16, (5, 5)),
+            nn.Conv2d(64, 64, (5, 5)),
             nn.Dropout(0.1),
-            nn.MaxPool2d((2, 2))
+            nn.ReLU(),
+            nn.Conv2d(64, 32, (3, 3)),
+            nn.Dropout(0.1),
+            nn.ReLU(),
+            nn.Conv2d(32, 32, (2, 2)),
+            nn.Dropout(0.1),
         )
         d = 64
         # Project to smaller dimension before performing self-attention along the temporal dimension
-        self.project_lin = nn.Linear(128, d)
+        self.project_lin = nn.Linear(160, d)
         
-        self.time_encoder = TransformerEnc(dim=d, depth=6, heads=2, dim_head=d//2, mlp_dim=3*d)
+        self.time_encoder = TransformerEnc(dim=d, depth=2, heads=2, dim_head=d//2, mlp_dim=3*d)
         
         # Define position embeddings for transformer, we process 30 frames
         positions = torch.arange(0, 30).unsqueeze_(1)
@@ -70,7 +75,7 @@ class DepthEncoder(nn.Module):
 # Original image size is 3 x 48 x 64 (we have 30 of them)
 class DepthReconstruct(nn.Module):
  
-    def __init__(self):
+    def __init__(self, mask_ratio=0.2):
         super(DepthReconstruct, self).__init__()
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         # Arbitrarily set the token size to be 512
@@ -93,15 +98,19 @@ class DepthReconstruct(nn.Module):
 
 
     # Input is b_size x 1920 (30 x 64)
-    def forward(self, depth_tokens):
+    def forward(self, depth_tokens, mask):
 
         batch_size = depth_tokens.shape[0]
         depth_tokens = torch.reshape(depth_tokens, (batch_size, 30, 64))
+        mask = torch.reshape(mask, (1, len(mask), 1))
+        mask_token = repeat(self.mask_token, 'd -> b n d', b=batch_size, n=30)
+        depth_tokens = depth_tokens * mask + mask_token * (1 - mask)
+
         output = self.encoder(depth_tokens)
         output = self.project_lin(output)
         output = torch.reshape(output, (batch_size * 30, 16, 2, 4))
         output = self.deconv(output)
-        return torch.reshape(output, (batch_size, 30, 1, 48, 64))
+        return torch.reshape(output, (batch_size, 30, 48, 64))
 
 
         
@@ -333,4 +342,39 @@ class mmWaveDepthSupervised(nn.Module):
         return self.output_head(cls_out)
     
 
+class SupervisedUnimodal(nn.Module):
+    def __init__(self):
+        super(SupervisedUnimodal, self).__init__()
+        self.depth_encoder = DepthEncoder()
+        self.mmWave_encoder = mmWaveEncoder()
+        self.skeleton_encoder = SkeletonEncoder()
 
+        self.mmWave_adapter = nn.Sequential(
+                nn.Linear(1920, 800), # used to be 240 maybe that was why it does better?
+                nn.ReLU(),
+                nn.Linear(800, 27)
+            )
+        self.depth_adapter = nn.Sequential(
+            nn.Linear(1920, 27)
+        )
+        self.skeleton_adapter = nn.Sequential(
+            nn.Linear(480, 240),
+            nn.ReLU(),
+            nn.Linear(240, 27)
+        )
+    def forward(self, data, curr_mod):
+        if (curr_mod == 'depth'):
+            embedding = self.depth_encoder(data)
+            batch_size = embedding.shape[0]
+            embedding = torch.reshape(embedding, (batch_size, -1))
+            return self.depth_adapter(embedding)
+        if (curr_mod == 'mmwave'):
+            embedding = self.mmwave_encoder(data)
+            batch_size = embedding.shape[0]
+            embedding = torch.reshape(embedding, (batch_size, -1))
+            return self.mmwave_adapter(embedding)
+        if (curr_mod == 'skeleton'):
+            embedding = self.skeleton_encoder(data)
+            batch_size = embedding.shape[0]
+            embedding = torch.reshape(embedding, (batch_size, -1))
+            return self.skeleton_adapter(embedding)

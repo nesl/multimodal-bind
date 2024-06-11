@@ -41,7 +41,7 @@ def collate_fn_padd(batch):
 
     for i in range(len(batch)):
         if ('input_depth' not in batch[i].keys()):
-            batch[i]['input_depth'] = torch.full((30, 3, 48, 64), -1.1)
+            batch[i]['input_depth'] = torch.full((30, 1, 48, 64), -1.1)
         if ('input_mmwave' not in batch[i].keys()):
             batch[i]['input_mmwave'] = torch.full((1, 297, 5), -1.1)
 
@@ -78,13 +78,13 @@ def parse_option():
                         help='batch_size')
     parser.add_argument('--num_workers', type=int, default=16,
                         help='num of workers to use')
-    parser.add_argument('--epochs', type=int, default=200,
+    parser.add_argument('--epochs', type=int, default=300,
                         help='number of training epochs')
     parser.add_argument('--num_positive', type=int, default=2,
                         help='number of positive samples')
 
     # optimization
-    parser.add_argument('--learning_rate', type=float, default=1e-4,
+    parser.add_argument('--learning_rate', type=float, default=1e-3,
                         help='learning rate')
     parser.add_argument('--momentum', type=float, default=0.9,
                         help='momentum')

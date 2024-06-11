@@ -1,2 +1,6 @@
 MMFI_D*/
 *.pth
+*.txt
+*.pyc
+MMFI_Code_temp_updated/
+*.pickle

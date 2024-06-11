@@ -31,7 +31,7 @@ try:
 except ImportError:
     pass
 
-
+# Standard collate_fn_padd for loading paired data
 def collate_fn_padd(batch):
     '''
     Padds batch of variable length
@@ -88,8 +88,8 @@ def parse_option():
 
     # model dataset
     parser.add_argument('--model', type=str, default='MyUTDmodel')
-    # In this one, train all
-    parser.add_argument("--train_config", type=str, default="../Configs/config_train_all.yaml", help="Configuration YAML file")
+    # TODO changed
+    parser.add_argument("--train_config", type=str, default="../Configs/config_train_C.yaml", help="Configuration YAML file")
     parser.add_argument("--val_config", type=str, default="../Configs/config_val.yaml", help="Configuration YAML file")
     parser.add_argument('--num_class', type=int, default=27,
                         help='num_class')
@@ -111,7 +111,7 @@ def parse_option():
     np.random.seed(opt.seed)
 
     # set the path according to the environment
-    opt.save_path = './save_upper_bound/'
+    opt.save_path = './save_dual_contrastive/'
     opt.model_path = opt.save_path + 'models'
     opt.tb_path = opt.save_path + 'tensorboard'
     opt.result_path = opt.save_path + 'results/'
@@ -157,7 +157,7 @@ def parse_option():
 # TODO changed
 def set_loader(opt):
 
-    #load labeled train and test data
+    # Load finetuning dataset and test dataset
     with open(opt.train_config, 'r') as handle:
         config_train = yaml.load(handle, Loader=yaml.FullLoader)
     with open(opt.val_config, 'r') as handle:
@@ -169,50 +169,28 @@ def set_loader(opt):
     train_loader = torch.utils.data.DataLoader(
         train_dataset, batch_size=opt.batch_size, num_workers=opt.num_workers,
          collate_fn=collate_fn_padd, pin_memory=True, shuffle=True)
-    #num_workers=opt.num_workers, 
+
     val_loader = torch.utils.data.DataLoader(
         val_dataset, batch_size=opt.batch_size, num_workers=opt.num_workers,
         collate_fn=collate_fn_padd, pin_memory=True, shuffle=True)
 
     return train_loader, val_loader
 
-# TODO changed
-def load_single_modal(opt, dataset):
-
-    opt.ckpt = '../train/save_upper_bound/save_{}_autoencoder/models/lr_0.0001_decay_0.0001_bsz_64/'.format(dataset)
-    ckpt_path = opt.ckpt + 'last.pth'
-    ckpt = torch.load(ckpt_path, map_location='cpu')
-    state_dict = ckpt['model']
-
-    if dataset == "train_A":
-        layer_key = 'depth_encoder.'
-    else:
-        layer_key = 'mmWave_encoder.'
-    new_state_dict = {}
-    for k, v in state_dict.items():
-        if layer_key in k:
-            k = k.replace(layer_key, "")
-            if torch.cuda.is_available():
-                k = k.replace("module.", "")
-            new_state_dict[k] = v
-    state_dict = new_state_dict
-
-    return state_dict
 
 # TODO changed
 def set_model(opt):
-
+    # Create our supervised model and also a template model we load weights into
     model = model_lib.mmWaveDepthSupervised()
+    model_template = model_lib.DualContrastiveModel()
 
-    model_template = model_lib.mmWaveDepthContrastive() # TODO changed this
-    checkpoint = '../train/save_upper_bound/models/lr_0.0001_decay_0.0001_bsz_64/last.pth'
+    checkpoint = '../train/save_mmbind/save_train_all_paired_AB_incomplete_no_pretrain/models/lr_0.0005_decay_0.0001_bsz_64/last.pth'
     model_template.load_state_dict(torch.load(checkpoint)['model'])
+
     # Copy the model weights between the two models, TODO use pdb to verify that the weights are correctly loaded
     model.depth_encoder = model_template.depth_encoder
     model.mmWave_encoder = model_template.mmWave_encoder
 
     criterion = torch.nn.CrossEntropyLoss()
-    
     # enable synchronized Batch Normalization
     if opt.syncBN:
         model = apex.parallel.convert_syncbn_model(model)
@@ -248,8 +226,7 @@ def train(train_loader, model, criterion, optimizer, epoch, opt):
        
         bsz = len(batched_data['action'])
 
-        # warm-up learning rate
-        # warmup_learning_rate(opt, epoch, idx, len(train_loader), optimizer)
+        # Standard training
         actions = batched_data['action']
         labels = torch.tensor([int(item[1:]) - 1 for item in actions]).cuda()
         output = model(batched_data)

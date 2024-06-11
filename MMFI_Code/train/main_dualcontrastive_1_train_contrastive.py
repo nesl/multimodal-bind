@@ -82,11 +82,11 @@ def parse_option():
                         help='batch_size')
     parser.add_argument('--num_workers', type=int, default=16,
                         help='num of workers to use')
-    parser.add_argument('--epochs', type=int, default=300,
+    parser.add_argument('--epochs', type=int, default=100,
                         help='number of training epochs')
 
     # optimization
-    parser.add_argument('--learning_rate', type=float, default=1e-3,
+    parser.add_argument('--learning_rate', type=float, default=1e-4,
                         help='learning rate')
     parser.add_argument('--momentum', type=float, default=0.9,
                         help='momentum')

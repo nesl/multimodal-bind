@@ -80,7 +80,7 @@ def parse_option():
                         help='number of training epochs')
 
     # optimization
-    parser.add_argument('--learning_rate', type=float, default=1e-4,
+    parser.add_argument('--learning_rate', type=float, default=5e-4,
                         help='learning rate')
     parser.add_argument('--momentum', type=float, default=0.9,
                         help='momentum')
@@ -118,7 +118,7 @@ def parse_option():
     np.random.seed(opt.seed)
 
     # set the path according to the environment
-    opt.save_path = "./save_mmbind/save_{}_contrastive_{}/".format(opt.dataset, opt.load_pretrain)
+    opt.save_path = "./save_mmbind/save_{}_incomplete_{}/".format(opt.dataset, opt.load_pretrain)
     opt.model_path = opt.save_path + 'models'
     opt.tb_path = opt.save_path + 'tensorboard'
     opt.result_path = opt.save_path + 'results/'
@@ -176,17 +176,17 @@ def set_loader(opt):
         print("train paired data:")
         with open('../Configs/config_train_AB_Contrastive.yaml', 'r') as handle:
             config_train = yaml.load(handle, Loader=yaml.FullLoader)
-            train_dataset, _ = make_dataset('../../save_mmbind/train_merged_paired_AB/', config_train)
+            train_dataset, _ = make_dataset('./save_mmbind/train_all_paired_AB/', config_train)
     elif opt.dataset == "train_depth_paired_AB":
         print("train paired data:")
         with open('../Configs/config_train_A_Contrastive.yaml', 'r') as handle:
             config_train = yaml.load(handle, Loader=yaml.FullLoader)
-            train_dataset, _ = make_dataset('../../save_mmbind/train_depth_paired_AB/', config_train)
+            train_dataset, _ = make_dataset('./save_mmbind/train_depth_paired_AB/', config_train)
     elif opt.dataset == "train_mmwave_paired_AB":
         print("train paired data:")
         with open('../Configs/config_train_B_Contrastive.yaml', 'r') as handle:
             config_train = yaml.load(handle, Loader=yaml.FullLoader)
-            train_dataset, _ = make_dataset('../../save_mmbind/train_mmwave_paired_AB/', config_train)
+            train_dataset, _ = make_dataset('./save_mmbind/train_mmwave_paired_AB/', config_train)
     else:
         raise Exception('invalid training dataset')
     

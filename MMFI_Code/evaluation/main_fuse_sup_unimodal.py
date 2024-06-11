@@ -88,7 +88,8 @@ def parse_option():
 
     # model dataset
     parser.add_argument('--model', type=str, default='MyUTDmodel')
-    # In this one, train all
+    parser.add_argument('--modality', type=str, default="depth")
+    # TODO changed
     parser.add_argument("--train_config", type=str, default="../Configs/config_train_all.yaml", help="Configuration YAML file")
     parser.add_argument("--val_config", type=str, default="../Configs/config_val.yaml", help="Configuration YAML file")
     parser.add_argument('--num_class', type=int, default=27,
@@ -111,7 +112,7 @@ def parse_option():
     np.random.seed(opt.seed)
 
     # set the path according to the environment
-    opt.save_path = './save_upper_bound/'
+    opt.save_path = './save_unimodal_' + opt.modality + '/'
     opt.model_path = opt.save_path + 'models'
     opt.tb_path = opt.save_path + 'tensorboard'
     opt.result_path = opt.save_path + 'results/'
@@ -154,7 +155,6 @@ def parse_option():
 
     return opt
 
-# TODO changed
 def set_loader(opt):
 
     #load labeled train and test data
@@ -177,42 +177,11 @@ def set_loader(opt):
     return train_loader, val_loader
 
 # TODO changed
-def load_single_modal(opt, dataset):
-
-    opt.ckpt = '../train/save_upper_bound/save_{}_autoencoder/models/lr_0.0001_decay_0.0001_bsz_64/'.format(dataset)
-    ckpt_path = opt.ckpt + 'last.pth'
-    ckpt = torch.load(ckpt_path, map_location='cpu')
-    state_dict = ckpt['model']
-
-    if dataset == "train_A":
-        layer_key = 'depth_encoder.'
-    else:
-        layer_key = 'mmWave_encoder.'
-    new_state_dict = {}
-    for k, v in state_dict.items():
-        if layer_key in k:
-            k = k.replace(layer_key, "")
-            if torch.cuda.is_available():
-                k = k.replace("module.", "")
-            new_state_dict[k] = v
-    state_dict = new_state_dict
-
-    return state_dict
-
-# TODO changed
 def set_model(opt):
-
-    model = model_lib.mmWaveDepthSupervised()
-
-    model_template = model_lib.mmWaveDepthContrastive() # TODO changed this
-    checkpoint = '../train/save_upper_bound/models/lr_0.0001_decay_0.0001_bsz_64/last.pth'
-    model_template.load_state_dict(torch.load(checkpoint)['model'])
-    # Copy the model weights between the two models, TODO use pdb to verify that the weights are correctly loaded
-    model.depth_encoder = model_template.depth_encoder
-    model.mmWave_encoder = model_template.mmWave_encoder
-
+    # Do not load any weights and just train on dataset C (should not be any worse than this)
+    model = model_lib.SupervisedUnimodal()
     criterion = torch.nn.CrossEntropyLoss()
-    
+
     # enable synchronized Batch Normalization
     if opt.syncBN:
         model = apex.parallel.convert_syncbn_model(model)
@@ -252,7 +221,7 @@ def train(train_loader, model, criterion, optimizer, epoch, opt):
         # warmup_learning_rate(opt, epoch, idx, len(train_loader), optimizer)
         actions = batched_data['action']
         labels = torch.tensor([int(item[1:]) - 1 for item in actions]).cuda()
-        output = model(batched_data)
+        output = model(batched_data, opt.modality)
 
 
         label_list.extend(labels.cpu().numpy())
@@ -321,7 +290,7 @@ def validate(val_loader, model, criterion, opt):
 
             actions = batched_data['action']
             labels = torch.tensor([int(item[1:]) - 1 for item in actions]).cuda()
-            output = model(batched_data)
+            output = model(batched_data, opt.modality)
 
             label_list.extend(labels.cpu().numpy())
             pred_list.extend(output.max(1)[1].cpu().numpy())

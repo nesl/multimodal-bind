@@ -152,7 +152,7 @@ def set_model(opt):
     model = SkeletonEncoder()
     # Use the skeletonAE() as a template to load weights in and then copy the weights
     model_template = SkeletonAE()
-    model_template.load_state_dict(torch.load('./save_mmbind/save_train_AB_skeleton_AE/models/single_train_AB_lr_0.0001_decay_0.0001_bsz_64/last.pth')['model'])
+    model_template.load_state_dict(torch.load('./save_mmbind/save_train_AB_skeleton_AE/models/single_train_AB_lr_0.001_decay_0.0001_bsz_64/last.pth')['model'])
     model = model_template.skeleton_encoder
     model = model.cuda()
     return model
