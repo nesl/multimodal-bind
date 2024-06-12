@@ -1,136 +1,46 @@
 from __future__ import print_function
 
 import os
+import pprint
 import sys
 import argparse
 import time
 import math
 
 # import tensorboard_logger as tb_logger
+from evaluation.main_fuse_sup_baseline3_vector_attach_incomplete_contrastive import parse_option
+from evaluation.models.imu_models import SingleIMUAutoencoder
 import torch
 import torch.backends.cudnn as cudnn
 # from torchvision import transforms, datasets
 
 
 import numpy as np
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import f1_score
 
 from shared_files.util import AverageMeter
-from shared_files.util import adjust_learning_rate, warmup_learning_rate, accuracy
+from shared_files.util import adjust_learning_rate
 from shared_files.util import set_optimizer, save_model
 from shared_files import data_pre as data
 
 from models.skeleton_to_acc_gyro import MyUTDmodel_skeleton_to_acc, MyUTDmodel_skeleton_to_gyro
 
-try:
-    import apex
-    from apex import amp, optimizers
-except ImportError:
-    pass
-
-
-def parse_option():
-    parser = argparse.ArgumentParser('argument for training')
-
-    parser.add_argument('--print_freq', type=int, default=1,
-                        help='print frequency')
-    parser.add_argument('--save_freq', type=int, default=50,
-                        help='save frequency')
-    parser.add_argument('--batch_size', type=int, default=64,
-                        help='batch_size')
-    parser.add_argument('--num_workers', type=int, default=16,
-                        help='num of workers to use')
-    parser.add_argument('--epochs', type=int, default=200,
-                        help='number of training epochs')
-
-    # optimization
-    parser.add_argument('--learning_rate', type=float, default=1e-4,
-                        help='learning rate')
-    parser.add_argument('--momentum', type=float, default=0.9,
-                        help='momentum')
-    parser.add_argument('--weight_decay', type=float, default=1e-4,
-                        help='weight decay')
-    parser.add_argument('--lr_decay_epochs', type=str, default='350,400,450',
-                        help='where to decay lr, can be a list')
-    parser.add_argument('--lr_decay_rate', type=float, default=0.1,
-                        help='decay rate for learning rate')
-
-    # model dataset
-    parser.add_argument('--model', type=str, default='MyUTDmodel')
-    parser.add_argument('--dataset', type=str, default='train_A',
-                        choices=['train_A', 'train_B'], help='dataset')
-    parser.add_argument('--num_class', type=int, default=27,
-                        help='num_class')
-
-
-    # other setting
-    parser.add_argument('--cosine', action='store_true',
-                        help='using cosine annealing')
-    parser.add_argument('--syncBN', action='store_true',
-                        help='using synchronized batch normalization')
-    parser.add_argument('--warm', action='store_true',
-                        help='warm-up for large batch training')
-    parser.add_argument('--trial', type=str, default='0',
-                        help='id for recording multiple runs')
-
-    opt = parser.parse_args()
-
-    # set the path according to the environment
-    opt.save_path = './save_baseline4/save_{}_autoencoder/'.format(opt.dataset)
-    opt.model_path = opt.save_path + 'models'
-    opt.tb_path = opt.save_path + 'tensorboard'
-    opt.result_path = opt.save_path + 'results/'
-
-    iterations = opt.lr_decay_epochs.split(',')
-    opt.lr_decay_epochs = list([])
-    for it in iterations:
-        opt.lr_decay_epochs.append(int(it))
-
-    opt.model_name = 'lr_{}_decay_{}_bsz_{}'.\
-        format(opt.learning_rate, opt.weight_decay, opt.batch_size)
-
-    if opt.cosine:
-        opt.model_name = '{}_cosine'.format(opt.model_name)
-
-    # warm-up for large-batch training,
-    if opt.batch_size > 256:
-        opt.warm = True
-    if opt.warm:
-        opt.model_name = '{}_warm'.format(opt.model_name)
-        opt.warmup_from = 0.01
-        opt.warm_epochs = 10
-        if opt.cosine:
-            eta_min = opt.learning_rate * (opt.lr_decay_rate ** 3)
-            opt.warmup_to = eta_min + (opt.learning_rate - eta_min) * (
-                    1 + math.cos(math.pi * opt.warm_epochs / opt.epochs)) / 2
-        else:
-            opt.warmup_to = opt.learning_rate
-
-    opt.tb_folder = os.path.join(opt.tb_path, opt.model_name)
-    if not os.path.isdir(opt.tb_folder):
-        os.makedirs(opt.tb_folder)
-
-    opt.save_folder = os.path.join(opt.model_path, opt.model_name)
-    if not os.path.isdir(opt.save_folder):
-        os.makedirs(opt.save_folder)
-
-    if not os.path.isdir(opt.result_path):
-        os.makedirs(opt.result_path)
-
-    return opt
-
+from tqdm import tqdm
 
 def set_loader(opt):
+    mod = opt.common_modality
+    mod_space = ['acc', 'gyro', 'mag']
+    multi_mod_space = [[mod, m] for m in mod_space if m != mod]
 
-    #load labeled train and test data
-    print("train data:")
-    x_train_1, x_train_2, y_train = data.load_original_data(opt.dataset)# [Acc, Skeleton] or [Skeleton, Gyro]
+    opt.valid_mod = multi_mod_space
 
     if opt.dataset == "train_A":
-        train_dataset = data.Multimodal_dataset(x_train_2, x_train_1, y_train)
-    elif opt.dataset == "train_B":
-        train_dataset = data.Multimodal_dataset(x_train_1, x_train_2, y_train)
+        print(f"=\tTraining {opt.valid_mod[0]} on dataset A")
+        opt.other_mod = opt.valid_mod[0][1]
+        train_dataset = data.Multimodal_dataset([], opt.valid_mod[0], root='train_A', opt=opt)
+    else:
+        print(f"=\tTraining {opt.valid_mod[1]} on dataset B")
+        opt.other_mod = opt.valid_mod[1][1]
+        train_dataset = data.Multimodal_dataset([], opt.valid_mod[1], root='train_B', opt=opt)
 
     train_loader = torch.utils.data.DataLoader(
         train_dataset, batch_size=opt.batch_size,
@@ -145,16 +55,15 @@ def set_model(opt):
         model = MyUTDmodel_skeleton_to_acc(input_size=1)
     else:
         model = MyUTDmodel_skeleton_to_gyro(input_size=1)
+    
+    pprint(f"=\tInitializing Autoencoder for mod {opt.common_modality}")
+    print(f"=\tInitializing Autoencoder for mod {opt.common_modality}")
+    model = SingleIMUAutoencoder(opt.common_modality)  # acc autoencoder -> gyro/mag output
+
 
     criterion = torch.nn.MSELoss()
 
-    # enable synchronized Batch Normalization
-    if opt.syncBN:
-        model = apex.parallel.convert_syncbn_model(model)
-
     if torch.cuda.is_available():
-        # if torch.cuda.device_count() > 1:
-        #     model = torch.nn.DataParallel(model)
         model = model.cuda()
         criterion = criterion.cuda()
         cudnn.benchmark = True
@@ -174,21 +83,20 @@ def train(train_loader, model, criterion, optimizer, epoch, opt):
     end = time.time()
 
 
-    for idx, (input_data1, input_data2, labels) in enumerate(train_loader):
+    for _, batched_data in enumerate(train_loader):
         data_time.update(time.time() - end)
-
+        labels = batched_data['action']
         if torch.cuda.is_available():
-            input_data1 = input_data1.cuda()
-            input_data2 = input_data2.cuda()
             labels = labels.cuda()
         bsz = labels.shape[0]
 
         # warm-up learning rate
         # warmup_learning_rate(opt, epoch, idx, len(train_loader), optimizer)
 
-        output = model(input_data1)
-        
-        loss = criterion(input_data2, output)
+        output = model(batched_data)
+        output = torch.reshape(output, (bsz, -1, 3))
+
+        loss = criterion(batched_data[opt.other_mod], output)
 
         # update metric
         losses.update(loss.item(), bsz)
@@ -202,23 +110,11 @@ def train(train_loader, model, criterion, optimizer, epoch, opt):
         batch_time.update(time.time() - end)
         end = time.time()
 
-        # print info
-        if (idx + 1) % opt.print_freq == 0:
-            print('Train: [{0}][{1}/{2}]\t'
-                  'BT {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
-                  'DT {data_time.val:.3f} ({data_time.avg:.3f})\t'
-                  'loss {loss.val:.3f} ({loss.avg:.3f})\t'.format(
-                   epoch, idx + 1, len(train_loader), batch_time=batch_time,
-                   data_time=data_time, loss=losses))
-            sys.stdout.flush()
-
-
     return losses.avg
 
 
 def main():
-
-    opt = parse_option()
+    opt = parse_option(exp_type="save_baseline4", exp_tag="cross_autoencoder")
 
     # build data loader
     train_loader = set_loader(opt)
@@ -234,29 +130,22 @@ def main():
 
     record_loss = np.zeros(opt.epochs)
 
+    pprint(f"Start Training")
     # training routine
-    for epoch in range(1, opt.epochs + 1):
+    for epoch in tqdm(range(1, opt.epochs + 1), desc=f'Epoch: ', unit='items', ncols=80, colour='green', bar_format='{l_bar}{bar}| {n_fmt}/{total_fmt}[{elapsed}<{remaining}]'):
         adjust_learning_rate(opt, optimizer, epoch)
 
-        # train for one epoch
-        time1 = time.time()
         loss = train(train_loader, model, criterion, optimizer, epoch, opt)
-        time2 = time.time()
-
-        print('epoch {}, total time {:.2f}'.format(epoch, time2 - time1))
 
         record_loss[epoch-1] = loss
 
-        if epoch % opt.save_freq == 0:
-            save_file = os.path.join(
-                opt.save_folder, 'ckpt_epoch_{epoch}.pth'.format(epoch=epoch))
-            save_model(model, optimizer, opt, epoch, save_file)
-
-        np.savetxt(opt.result_path + "loss_{}_{}.txt".format(opt.learning_rate, opt.epochs), record_loss)
+        pprint(f"Epoch {epoch} - Loss: {loss}")
     
+    # save the record loss
+    np.savetxt(opt.result_path + f"loss_{opt.learning_rate}_{opt.epochs}.txt", record_loss)
+
     # save the last model
-    save_file = os.path.join(
-        opt.save_folder, 'last.pth')
+    save_file = os.path.join(opt.save_folder, 'last.pth')
     save_model(model, optimizer, opt, opt.epochs, save_file)
 
 

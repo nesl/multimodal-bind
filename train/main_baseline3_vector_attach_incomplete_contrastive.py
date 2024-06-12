@@ -25,14 +25,6 @@ from models.fuse_3M_acc_skeleton_gyro import MyUTDmodel_3M_contrastive_mask2
 from shared_files.contrastive_design_3M import FeatureConstructor, ConFusionLoss
 
 
-
-try:
-    import apex
-    from apex import amp, optimizers
-except ImportError:
-    pass
-
-
 def parse_option():
     parser = argparse.ArgumentParser('argument for training')
 
@@ -260,7 +252,6 @@ def train(train_loader, model, criterion, optimizer, epoch, opt):
 
 
 def main():
-    opt = parse_option()
     opt = parse_option(exp_type="save_baseline3", exp_tag="_vector2_incomplete_contrastive_zero")
 
     # build data loader
