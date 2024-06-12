@@ -22,8 +22,6 @@ from shared_files.util import adjust_learning_rate
 from shared_files.util import set_optimizer, save_model
 from shared_files import data_pre as data
 
-from models.skeleton_to_acc_gyro import MyUTDmodel_skeleton_to_acc, MyUTDmodel_skeleton_to_gyro
-
 from tqdm import tqdm
 
 def set_loader(opt):
