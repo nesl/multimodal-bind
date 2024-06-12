@@ -76,6 +76,7 @@ def train(train_loader, model, criterion, optimizer, epoch, opt):
         data_time.update(time.time() - end)
         labels = batched_data['action']
         if torch.cuda.is_available():
+            batched_data = batched_data.cuda()
             labels = labels.cuda()
         bsz = labels.shape[0]
 
