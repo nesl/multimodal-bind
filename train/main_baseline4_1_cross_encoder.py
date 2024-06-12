@@ -1,14 +1,11 @@
 from __future__ import print_function
 
 import os
-import pprint
-import sys
-import argparse
 import time
-import math
 
 # import tensorboard_logger as tb_logger
 from modules.option_utils import parse_option
+from modules.print_utils import pprint
 from models.imu_models import SingleIMUAutoencoder
 import torch
 import torch.backends.cudnn as cudnn
