@@ -20,8 +20,9 @@ from shared_files.util import adjust_learning_rate, warmup_learning_rate, accura
 from shared_files.util import set_optimizer, save_model
 from shared_files import data_pre as data
 
-from models.fuse_acc_gyro import MyUTDmodel_IMU
-from shared_files.contrastive_weighted_design import FeatureConstructor, ConFusionLoss
+from models.fuse_3M_acc_skeleton_gyro import MyUTDmodel_3M_contrastive
+from shared_files.contrastive_design_3M import FeatureConstructor, ConFusionLoss
+
 
 
 try:
@@ -46,7 +47,7 @@ def parse_option():
                         help='number of training epochs')
 
     # optimization
-    parser.add_argument('--learning_rate', type=float, default=1e-4,
+    parser.add_argument('--learning_rate', type=float, default=1e-3,
                         help='learning rate')
     parser.add_argument('--momentum', type=float, default=0.9,
                         help='momentum')
@@ -59,14 +60,14 @@ def parse_option():
 
     # model dataset
     parser.add_argument('--model', type=str, default='MyUTDmodel')
-    parser.add_argument('--dataset', type=str, default='train_AB',
-                        choices=['train_A', 'train_B', 'train_AB'], help='dataset')
+    parser.add_argument('--dataset', type=str, default='train_all_paired_AB', 
+                        choices=['train_acc_paired_AB', 'train_gyro_paired_AB', 'train_all_paired_AB'], help='dataset')
+    parser.add_argument('--load_pretrain', type=str, default='no_pretrain', help='load_pretrain or no_pretrain')
     parser.add_argument('--num_class', type=int, default=27,
                         help='num_class')
     # temperature
     parser.add_argument('--temp', type=float, default=0.07,
                         help='temperature for loss function')
-    parser.add_argument('--load_pretrain', type=str, default='no_load', help='load_pretrain')
 
     # other setting
     parser.add_argument('--cosine', action='store_true',
@@ -77,16 +78,11 @@ def parse_option():
                         help='warm-up for large batch training')
     parser.add_argument('--trial', type=str, default='0',
                         help='id for recording multiple runs')
-    parser.add_argument('--seed', type=int, default=100)
-
 
     opt = parser.parse_args()
 
-    torch.manual_seed(opt.seed)
-    np.random.seed(opt.seed)
-
     # set the path according to the environment
-    opt.save_path = "./save_baseline2/save_{}_mask_contrastive_{}/".format(opt.dataset, opt.load_pretrain)
+    opt.save_path = "./save_mmbind/save_{}_incomplete_contrastive_{}/".format(opt.dataset, opt.load_pretrain)
     opt.model_path = opt.save_path + 'models'
     opt.tb_path = opt.save_path + 'tensorboard'
     opt.result_path = opt.save_path + 'results/'
@@ -134,12 +130,28 @@ def set_loader(opt):
 
     #load labeled train and test data
     print("train data:")
-    if opt.dataset == "train_all_paired_AB":
-        x_train_1, x_train_2, similarity = data.load_all_paired_data()
-    else:
-        x_train_1, x_train_2, similarity = data.load_paired_data(opt.dataset)
 
-    train_dataset = data.Multimodal_paired_dataset(x_train_1, x_train_2, similarity)
+    ## load paired data and make it the format of incomplete data
+    paired_x_train_1, paired_x_train_3, similarity = data.load_all_paired_data()# acc, gyro
+    paired_x_train_2 = np.zeros((paired_x_train_3.shape[0], 40, 20, 3))
+    paired_mask_vector = np.zeros((paired_x_train_3.shape[0], 3, 128))
+    paired_mask_vector[:, 0, :] = 1.0
+    paired_mask_vector[:, 2, :] = 1.0
+    
+    ## load train_A and train_B in the format of incomplete data
+    original_x_train_1, original_x_train_2, original_x_train_3, original_y_train, original_mask_vector = data.load_all_data_incomplete()#acc, skeleton, gyro
+
+    # print(original_mask_vector.shape)
+    ## concatenate all data
+    x_train_1 = np.vstack((original_x_train_1, paired_x_train_1))
+    x_train_2 = np.vstack((original_x_train_2, paired_x_train_2))
+    x_train_3 = np.vstack((original_x_train_3, paired_x_train_3))
+    y_train = np.hstack((original_y_train, similarity))
+    mask_vector = np.vstack((original_mask_vector, paired_mask_vector))
+
+    print(x_train_1.shape, x_train_2.shape, x_train_3.shape, y_train.shape)
+
+    train_dataset = data.Multimodal_incomplete_dataset(x_train_1, x_train_2, x_train_3, y_train, mask_vector)
 
     train_loader = torch.utils.data.DataLoader(
         train_dataset, batch_size=opt.batch_size,
@@ -148,17 +160,19 @@ def set_loader(opt):
     return train_loader
 
 
-def load_single_modal(opt, dataset):
+def load_single_modal(opt, layer_key):
 
-    opt.ckpt = '../baseline_1_separate_encoder/save_{}_autoencoder/models/lr_0.0001_decay_0.0001_bsz_64/'.format(dataset)
+    if layer_key == 'acc_encoder.':
+        opt.ckpt = './save_baseline1/save_train_A_autoencoder/models/lr_0.0001_decay_0.0001_bsz_64/'
+    elif layer_key == 'gyro_encoder.':
+        opt.ckpt = './save_baseline1/save_train_B_autoencoder/models/lr_0.0001_decay_0.0001_bsz_64/'
+    elif layer_key == 'skeleton_encoder.':
+        opt.ckpt = './save_mmbind/save_train_AB_skeleton_AE/models/single_train_AB_lr_0.0005_decay_0.0001_bsz_64/'
+
     ckpt_path = opt.ckpt + 'last.pth'
     ckpt = torch.load(ckpt_path, map_location='cpu')
     state_dict = ckpt['model']
 
-    if dataset == "train_A":
-        layer_key = 'acc_encoder.'
-    else:
-        layer_key = 'gyro_encoder.'
     new_state_dict = {}
     for k, v in state_dict.items():
         if layer_key in k:
@@ -170,10 +184,9 @@ def load_single_modal(opt, dataset):
 
     return state_dict
 
-
 def set_model(opt):
 
-    model = MyUTDmodel_IMU(input_size=1, num_classes=opt.num_class)
+    model = MyUTDmodel_3M_contrastive(input_size=1)
     criterion = ConFusionLoss(temperature=opt.temp)
 
     # enable synchronized Batch Normalization
@@ -188,12 +201,11 @@ def set_model(opt):
         cudnn.benchmark = True
 
     if opt.load_pretrain == "load_pretrain":
-        model.acc_encoder.load_state_dict(load_single_modal(opt, 'train_A'))
-        model.gyro_encoder.load_state_dict(load_single_modal(opt, 'train_B'))
-
+        model.acc_encoder.load_state_dict(load_single_modal(opt, 'acc_encoder.'))
+        model.gyro_encoder.load_state_dict(load_single_modal(opt, 'gyro_encoder.'))
+        model.skeleton_encoder.load_state_dict(load_single_modal(opt, 'skeleton_encoder.'))
 
     return model, criterion
-
 
 
 def train(train_loader, model, criterion, optimizer, epoch, opt):
@@ -203,27 +215,28 @@ def train(train_loader, model, criterion, optimizer, epoch, opt):
     batch_time = AverageMeter()
     data_time = AverageMeter()
     losses = AverageMeter()
+
     end = time.time()
 
-
-    for idx, (input_data1, input_data2, similarity) in enumerate(train_loader):
+    for idx, (input_data1, input_data2, input_data3, label, mask) in enumerate(train_loader):
         data_time.update(time.time() - end)
 
         if torch.cuda.is_available():
             input_data1 = input_data1.cuda()
             input_data2 = input_data2.cuda()
-            similarity = similarity.cuda()
-        bsz = similarity.shape[0]
+            input_data3 = input_data3.cuda()
+            label = label.cuda()
+            mask = mask.cuda()
+        bsz = input_data1.shape[0]
 
         # warm-up learning rate
         # warmup_learning_rate(opt, epoch, idx, len(train_loader), optimizer)
 
-        feature1, feature2 = model(input_data1, input_data2)
+        feature1, feature2, feature3 = model(input_data1, input_data2, input_data3, mask)
+        
+        features = FeatureConstructor(feature1, feature2, feature3, 2)
 
-        features = FeatureConstructor(feature1, feature2, 2)
-
-        # print(similarity)
-        loss = criterion(features, similarity)
+        loss = criterion(features)
         losses.update(loss.item(), bsz)
 
         # SGD
@@ -248,7 +261,6 @@ def train(train_loader, model, criterion, optimizer, epoch, opt):
     return losses.avg
 
 
-
 def main():
     opt = parse_option()
 
@@ -261,6 +273,8 @@ def main():
     # build optimizer
     optimizer = set_optimizer(opt, model)
 
+    # tensorboard
+    # logger = tb_logger.Logger(logdir=opt.tb_folder, flush_secs=2)
 
     record_loss = np.zeros(opt.epochs)
 
@@ -277,13 +291,14 @@ def main():
 
         record_loss[epoch-1] = loss
 
+
         if epoch % opt.save_freq == 0:
             save_file = os.path.join(
                 opt.save_folder, 'ckpt_epoch_{epoch}.pth'.format(epoch=epoch))
             save_model(model, optimizer, opt, epoch, save_file)
 
         np.savetxt(opt.result_path + "loss_{}_{}.txt".format(opt.learning_rate, opt.batch_size), record_loss)
-
+    
     # save the last model
     save_file = os.path.join(
         opt.save_folder, 'last.pth')
