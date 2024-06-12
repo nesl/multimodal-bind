@@ -8,8 +8,8 @@ import time
 import math
 
 # import tensorboard_logger as tb_logger
-from evaluation.main_fuse_sup_baseline3_vector_attach_incomplete_contrastive import parse_option
-from evaluation.models.imu_models import SingleIMUAutoencoder
+from modules.option_utils import parse_option
+from models.imu_models import SingleIMUAutoencoder
 import torch
 import torch.backends.cudnn as cudnn
 # from torchvision import transforms, datasets
