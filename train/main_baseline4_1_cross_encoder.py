@@ -49,13 +49,7 @@ def set_loader(opt):
     return train_loader
 
 
-def set_model(opt):
-
-    if opt.dataset == "train_A":
-        model = MyUTDmodel_skeleton_to_acc(input_size=1)
-    else:
-        model = MyUTDmodel_skeleton_to_gyro(input_size=1)
-    
+def set_model(opt):    
     pprint(f"=\tInitializing Autoencoder for mod {opt.common_modality}")
     print(f"=\tInitializing Autoencoder for mod {opt.common_modality}")
     model = SingleIMUAutoencoder(opt.common_modality)  # acc autoencoder -> gyro/mag output
