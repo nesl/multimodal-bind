@@ -75,7 +75,7 @@ class DepthEncoder(nn.Module):
 # Original image size is 3 x 48 x 64 (we have 30 of them)
 class DepthReconstruct(nn.Module):
  
-    def __init__(self, mask_ratio=0.2):
+    def __init__(self):
         super(DepthReconstruct, self).__init__()
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         # Arbitrarily set the token size to be 512
@@ -98,14 +98,10 @@ class DepthReconstruct(nn.Module):
 
 
     # Input is b_size x 1920 (30 x 64)
-    def forward(self, depth_tokens, mask):
+    def forward(self, depth_tokens):
 
         batch_size = depth_tokens.shape[0]
         depth_tokens = torch.reshape(depth_tokens, (batch_size, 30, 64))
-        mask = torch.reshape(mask, (1, len(mask), 1))
-        mask_token = repeat(self.mask_token, 'd -> b n d', b=batch_size, n=30)
-        depth_tokens = depth_tokens * mask + mask_token * (1 - mask)
-
         output = self.encoder(depth_tokens)
         output = self.project_lin(output)
         output = torch.reshape(output, (batch_size * 30, 16, 2, 4))
@@ -378,3 +374,64 @@ class SupervisedUnimodal(nn.Module):
             batch_size = embedding.shape[0]
             embedding = torch.reshape(embedding, (batch_size, -1))
             return self.skeleton_adapter(embedding)
+
+
+class SkeletonToDepth(nn.Module):
+    def __init__(self):
+        super(SkeletonToDepth, self).__init__()
+        self.skeleton_encoder = SkeletonEncoder()
+        self.depth_decoder = DepthReconstruct()
+        self.project = nn.Linear(480, 1920)
+    def forward(self, data):
+        skeleton_embed = self.skeleton_encoder(data)
+        transformed = self.project(skeleton_embed)
+        reconstructed_depth = self.depth_decoder(transformed)
+        return reconstructed_depth
+
+class SkeletonToMMWave(nn.Module):
+    def __init__(self):
+        super(SkeletonToMMWave, self).__init__()
+        self.skeleton_encoder = SkeletonEncoder()
+        self.mmwave_decoder = mmWaveReconstruct()
+        self.project = nn.Linear(480, 1920)
+    def forward(self, data):
+        skeleton_embed = self.skeleton_encoder(data)
+        transformed = self.project(skeleton_embed)
+        reconstructed_depth = self.mmwave_decoder(transformed)
+        return reconstructed_depth
+    
+
+# Utilized to train the DualContrastive Learning model
+class ContextDualContrastive(nn.Module):
+    def __init__(self):
+        super(ContextDualContrastive, self).__init__()
+        self.mmWave_encoder = mmWaveEncoder()
+        self.depth_encoder = DepthEncoder()
+        self.skeleton_encoder = SkeletonEncoder()
+        self.mmWave_adapter = nn.Sequential(
+            nn.Linear(1923, 800), # used to be 240 maybe that was why it does better?
+            nn.ReLU(),
+            nn.Linear(800, 128)
+        )
+        self.depth_adapter = nn.Sequential(
+            nn.Linear(1923, 800),
+            nn.ReLU(),
+            nn.Linear(800, 128)
+        )
+        self.skeleton_adapter = nn.Sequential(
+            nn.Linear(483, 240),
+            nn.ReLU(),
+            nn.Linear(240, 128)
+        )
+        
+    def forward(self, data, mask):
+        mmwave_embed = torch.cat((self.mmWave_encoder(data), mask), dim=-1)
+        depth_embed = torch.cat((self.depth_encoder(data), mask), dim=-1)
+        skeleton_embed = torch.cat((self.skeleton_encoder(data), mask), dim=-1)
+
+        mmWave_output= self.mmWave_adapter(mmwave_embed)
+        depth_output = self.depth_adapter(depth_embed)
+        skeleton_output = self.skeleton_adapter(skeleton_embed)
+
+        return nn.functional.normalize(depth_output), nn.functional.normalize(mmWave_output),\
+            nn.functional.normalize(skeleton_output)

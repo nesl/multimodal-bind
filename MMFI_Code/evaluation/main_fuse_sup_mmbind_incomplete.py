@@ -111,7 +111,7 @@ def parse_option():
     np.random.seed(opt.seed)
 
     # set the path according to the environment
-    opt.save_path = './save_dual_contrastive/'
+    opt.save_path = './save_mmbind_incomplete/'
     opt.model_path = opt.save_path + 'models'
     opt.tb_path = opt.save_path + 'tensorboard'
     opt.result_path = opt.save_path + 'results/'
@@ -183,7 +183,7 @@ def set_model(opt):
     model = model_lib.mmWaveDepthSupervised()
     model_template = model_lib.DualContrastiveModel()
 
-    checkpoint = '../train/save_mmbind/save_train_all_paired_AB_incomplete_no_pretrain/models/lr_0.0005_decay_0.0001_bsz_64/last.pth'
+    checkpoint = '../train/save_mmbind/save_train_all_paired_AB_incomplete_no_pretrain/models/lr_0.0005_decay_0.0001_bsz_32/last.pth'
     model_template.load_state_dict(torch.load(checkpoint)['model'])
 
     # Copy the model weights between the two models, TODO use pdb to verify that the weights are correctly loaded
