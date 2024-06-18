@@ -18,10 +18,10 @@ mmbind_contarstive_supervise has the best performance
 - Baseline 5: N/A as we did not add paired labeled data train_C, (Dual contrastive)
 - Upper Bound (all natually paired data from train_A and train_B): multimodal supervised learning
 - MMbind:
-  -- Step 1: Pair data according to labels
-  --Step 2:
-    * mmbind_contarstive (manually paired data by mmbind): multimodal contrastive learning + supervised learning (data of two paired modalities)
-    * mmbind_incomplete_contarstive (origianl data + manually paired data by mmbind): incomplete multimodal contrastive  + supervised learning (data of incomplete modalities + data of two paired modalities)
+  * Step 1: Pair data according to labels
+  * Step 2:
+    * mmbind_contarstive_supervise (manually paired data by mmbind): multimodal contrastive learning + supervised learning (data of two paired modalities)
+    * mmbind_incomplete_contarstive_supervise (origianl data + manually paired data by mmbind): incomplete multimodal contrastive  + supervised learning (data of incomplete modalities + data of two paired modalities)
 
 # Having Paired Dataset (train_C)
 mmbind_contarstive_supervise has the best performance
