@@ -6,10 +6,10 @@ Multimodal Embedding Learning with Distributed Incomplete Data
 
 ## Code of UTD dataset
 
-# No Paired Dataset (train_C)
+# No Paired Dataset (No train_C)
 mmbind_contarstive_supervise has the best performance
 
-#train_and_evaluate
+#train_and_evaluate (train_A+train_B)
 - Lower_bound: N/A as we did not add paired labeled data train_C
 - **Baseline 1**: Unimodal supervised learning 
 - **Baseline 2**: Incomplete multimodal supervised learning, no contrastive as no paired data
@@ -23,26 +23,24 @@ mmbind_contarstive_supervise has the best performance
     * **mmbind_contarstive_supervise** (manually paired data by mmbind): multimodal contrastive learning + supervised learning (data of two paired modalities)
     * **mmbind_incomplete_contarstive_supervise** (origianl data + manually paired data by mmbind): incomplete multimodal contrastive  + supervised learning (data of incomplete modalities + data of two paired modalities)
 
-# Having Paired Dataset (train_C)
+# Having Paired Dataset (Having train_C)
 mmbind_contarstive_supervise has the best performance
 
-#train
-- Baseline 1: Single-modal autoencoder
-- Baseline 2: Incomplete multimodal
-- Baseline 3: Incomplete multimodal + masked vector
-- Baseline 4: Cross-modal generation (also three steps)
-- Baseline 5: Dual contrastive
-- Upper Bound (all natually paired data): Single-modal autoencoder + multimodal contrastive (data of two paired modalities)
-- mmbind_contarstive (manually paired data by mmbind): Single-modal autoencoder + multimodal contrastive (data of two paired modalities)
-- mmbind_incomplete_contarstive (origianl data + manually paired data by mmbind): Incomplete multimodal contrastive (data of three incomplete modalities)
+#train (train_A+train_B)
+- **Baseline 1**: Unimodal supervised learning 
+- **Baseline 2**: Incomplete multimodal supervised learning, no contrastive as no paired data
+- **Baseline 3**: Incomplete multimodal supervised learning + prompt
+- MMbind:
+  * Step 1: Pair data according to labels
+  * Step 2:
+    * **mmbind_contarstive_supervise** (manually paired data by mmbind): multimodal contrastive learning + supervised learning (data of two paired modalities)
+    * **mmbind_incomplete_contarstive_supervise** (origianl data + manually paired data by mmbind): incomplete multimodal contrastive  + supervised learning (data of incomplete modalities + data of two paired modalities)
 
-#evaluate
-- Lower_bound: Limited labeled paired data for supervised model finetuening
-- Baseline 1: Single-modal autoencoder
-- Baseline 2: Incomplete multimodal
-- Baseline 3: Incomplete multimodal + masked vector
-- Baseline 4: Cross-modal generation
-- Baseline 5: Dual contrastive
-- Upper Bound (all natually paired data): Single-modal autoencoder + multimodal contrastive
-- mmbind_contarstive (manually paired data by mmbind): Single-modal autoencoder + multimodal contrastive (data of two paired modalities)
-- mmbind_incomplete_contarstive (origianl data + manually paired data by mmbind): Incomplete multimodal contrastive (data of three incomplete modalities)
+#evaluate (funetune an multimodal model with train_C)
+- **Lower_bound**: multimodal supervised learning with train_C
+- **Baseline 1**: Unimodal supervised learning 
+- **Baseline 2**: Incomplete multimodal supervised learning, no contrastive as no paired data
+- **Baseline 3**: Incomplete multimodal supervised learning + prompt
+- **Upper Bound** (all natually paired data): multimodal supervised learning on train_A+train_B+train_C
+- **mmbind_contarstive_supervise** (manually paired data by mmbind): multimodal contrastive learning + supervised learning (data of two paired modalities)
+- **mmbind_incomplete_contarstive_supervise** (origianl data + manually paired data by mmbind): incomplete multimodal contrastive  + supervised learning (data of incomplete modalities + data of two paired modalities)
