@@ -6,7 +6,7 @@ Multimodal Embedding Learning with Distributed Incomplete Data
 
 ## Code of UTD dataset
 
-# No Paired Dataset (No train_C)
+## No Paired Dataset (No train_C)
 main_mmbind_1_more_label_pair + mmbind_contarstive_supervise has the best performance
 
 #train_and_evaluate (train_A+train_B)
@@ -25,7 +25,7 @@ main_mmbind_1_more_label_pair + mmbind_contarstive_supervise has the best perfor
     * **MMbind_contarstive_supervise** (manually paired data by mmbind): multimodal contrastive learning + supervised learning (data of two paired modalities)
     * **MMbind_incomplete_contarstive_supervise** (origianl data + manually paired data by mmbind): incomplete multimodal contrastive  + supervised learning (data of incomplete modalities + data of two paired modalities)
 
-# Having Paired Dataset (Having train_C)
+## Having Paired Dataset (Having train_C)
 main_mmbind_1_more_label_pair + mmbind_contarstive_supervise has the best performance
 
 #train (train_A+train_B)
