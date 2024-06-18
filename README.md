@@ -1,4 +1,4 @@
-# Multimodal-Bind - UTD Dataset Label Bind
+# MMBind - UTD Label Bind
 Multimodal Embedding Learning with Distributed Incomplete Data
 
 ## Processed UTD dataset for label bind (data split is the same as sensor bind)
