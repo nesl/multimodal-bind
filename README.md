@@ -1,4 +1,4 @@
-# Multimodal-Bind - UTD dataset
+# Multimodal-Bind - UTD dataset Skeleton Bind
 Multimodal Embedding Learning with Distributed Incomplete Data
 
 ## Processed UTD dataset for skeleton bind
