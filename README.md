@@ -12,7 +12,7 @@ Multimodal Embedding Learning with Distributed Incomplete Data
 
 
 ## No Paired Dataset (No train_C)
-main_mmbind_1_more_label_pair + mmbind_contarstive_supervise has the best performance
+**main_mmbind_1_more_label_pair + mmbind_contarstive_supervise** has the best performance
 
 #train_and_evaluate (train_A+train_B)
 - Lower_bound: N/A as we did not add paired labeled data train_C
@@ -28,7 +28,7 @@ main_mmbind_1_more_label_pair + mmbind_contarstive_supervise has the best perfor
      * **main_mmbind_1_more_label_pair**: generate as much as possible paired multimodal samples for each unimodal sample, e.g., N = N_A * N_B_i + N_B * N_A_i (N_B_i is the # of samples for class i)
   * Step 2:
     * **MMbind_contarstive_supervise** (manually paired data by mmbind): multimodal contrastive learning + supervised learning (data of two paired modalities)
-    * **MMbind_incomplete_contarstive_supervise** (origianl data + manually paired data by mmbind): incomplete multimodal contrastive  + supervised learning (data of incomplete modalities + data of two paired modalities)
+    * (no need to run) MMbind_incomplete_contarstive_supervise (origianl data + manually paired data by mmbind): incomplete multimodal contrastive  + supervised learning (data of incomplete modalities + data of two paired modalities)
 
 ## Having Paired Dataset (Having train_C)
 main_mmbind_1_more_label_pair + mmbind_contarstive_supervise has the best performance
@@ -43,7 +43,7 @@ main_mmbind_1_more_label_pair + mmbind_contarstive_supervise has the best perfor
        * **main_mmbind_1_more_label_pair**: generate as much as possible paired multimodal samples for each unimodal sample, e.g., N = N_A * N_B_i + N_B * N_A_i (N_B_i is the # of samples for class i)
   * Step 2:
     * **MMbind_contarstive_supervise** (manually paired data by mmbind): multimodal contrastive learning + supervised learning (data of two paired modalities)
-    * **MMbind_incomplete_contarstive_supervise** (origianl data + manually paired data by mmbind): incomplete multimodal contrastive  + supervised learning (data of incomplete modalities + data of two paired modalities)
+    * MMbind_incomplete_contarstive_supervise (origianl data + manually paired data by mmbind): incomplete multimodal contrastive  + supervised learning (data of incomplete modalities + data of two paired modalities)
 
 #evaluate (funetune an multimodal model with train_C)
 - **Lower_bound**: multimodal supervised learning with train_C
@@ -52,4 +52,4 @@ main_mmbind_1_more_label_pair + mmbind_contarstive_supervise has the best perfor
 - **Baseline 3**: Incomplete multimodal supervised learning + prompt
 - **Upper Bound** (all natually paired data): multimodal supervised learning on train_A+train_B+train_C
 - **MMbind_contarstive_supervise** (manually paired data by mmbind): multimodal contrastive learning + supervised learning (data of two paired modalities)
-- **MMbind_incomplete_contarstive_supervise** (origianl data + manually paired data by mmbind): incomplete multimodal contrastive  + supervised learning (data of incomplete modalities + data of two paired modalities)
+- (no need to run) MMbind_incomplete_contarstive_supervise (origianl data + manually paired data by mmbind): incomplete multimodal contrastive  + supervised learning (data of incomplete modalities + data of two paired modalities)
