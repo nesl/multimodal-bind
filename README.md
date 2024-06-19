@@ -5,7 +5,7 @@ Multimodal Embedding Learning with Distributed Incomplete Data
 [https://drive.google.com/drive/folders/1gqVcOg5tagfdNNQ9d81oV0AReh--p_O1?usp=sharing](https://drive.google.com/file/d/136zY2L2krizCKf1MPEXY4AwJ09oylty4/view?usp=sharing)
 
 ## Code of UTD dataset
-mmbind_incomplete_contarstive has the best performance, without loading pretrained single-modal autoencoder.
+**mmbind_incomplete_contarstive** has the best performance, without loading pretrained single-modal autoencoder.
 
 
 #train
@@ -15,10 +15,10 @@ mmbind_incomplete_contarstive has the best performance, without loading pretrain
 - Baseline 4: Cross-modal generation (also three steps)
 - Baseline 5: Dual contrastive
 - mmbind_contarstive (manually paired data by mmbind): Single-modal autoencoder + multimodal contrastive (data of two paired modalities)
-- mmbind_incomplete_contarstive (origianl data + manually paired data by mmbind): Incomplete multimodal contrastive (data of three incomplete modalities)
+- **mmbind_incomplete_contarstive** (origianl data + manually paired data by mmbind): Incomplete multimodal contrastive (data of three incomplete modalities)
 - Upper Bound (all natually paired data):
   * Two modality fusion (main_upper_bound_2_fuse_contrastive.py): single-modal autoencoder + multimodal contrastive (data of two paired modalities)
-  * Three modality fusion (main_upper_bound_2_3M_contrastive.py): single-modal autoencoder + three multimodal contrastive (data of three paired modalities)
+  * **Three modality fusion** (main_upper_bound_2_3M_contrastive.py): single-modal autoencoder + three multimodal contrastive (data of three paired modalities)
 
 #evaluate
 - Lower_bound: Limited labeled paired data for supervised model finetuening
@@ -31,4 +31,4 @@ mmbind_incomplete_contarstive has the best performance, without loading pretrain
 - mmbind_incomplete_contarstive (origianl data + manually paired data by mmbind): Incomplete multimodal contrastive (data of three incomplete modalities)
 - Upper Bound (all natually paired data): 
   * Two modality fusion (main_fuse_sup_upper_bound.py): multimodal supervised learning (data of two paired modalities)
-  * Three modality fusion (main_fuse_sup_upper_bound_3M.py): multimodal supervised learning, incomplete data for three-modaliy modal (data of two paired modalities)
+  * **Three modality fusion** (main_fuse_sup_upper_bound_3M.py): multimodal supervised learning, incomplete data for three-modaliy modal (data of two paired modalities)
