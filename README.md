@@ -1,5 +1,5 @@
 # MMBind - UTD Label Bind
-Multimodal Embedding Learning with Distributed Incomplete Data
+
 **Update 0619**: update the file of "main_upper_bound.py" and "main_upper_bound_contrastive_supervise.py"
 
 ## Processed UTD dataset for label bind (data split is the same as sensor bind)
