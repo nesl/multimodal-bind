@@ -4,7 +4,12 @@ Multimodal Embedding Learning with Distributed Incomplete Data
 ## Processed UTD dataset for label bind (data split is the same as sensor bind)
 [https://drive.google.com/drive/folders/1gqVcOg5tagfdNNQ9d81oV0AReh--p_O1?usp=sharing](https://drive.google.com/file/d/136zY2L2krizCKf1MPEXY4AwJ09oylty4/view?usp=sharing)
 
-## Code of UTD dataset
+## Data Split of UTD dataset
+
+<p align="center" >
+	<img src="./dataset-split-UTD-label-bind.png" width="800">
+</p>
+
 
 ## No Paired Dataset (No train_C)
 main_mmbind_1_more_label_pair + mmbind_contarstive_supervise has the best performance
