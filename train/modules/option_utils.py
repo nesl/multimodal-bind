@@ -67,21 +67,31 @@ def parse_option(exp_type, exp_tag):
 
     parser.add_argument('--dataset_split', type=str, default="split_0")
 
+    parser.add_argument('--use_pair', type=bool, default=False)
+
     opt = parser.parse_args()
+
+    print()
+    print(f"="*80)
+    print(f"=\tBegin Training of {exp_type} - {exp_tag}")
 
     # Dataset
     opt.indice_file = f"../indices/{opt.dataset_split}"
     if not os.path.exists(opt.indice_file):
         raise ValueError(f"{opt.indice_file} not found, please generate with preprocess.py/generate_index.py")
-    opt.processed_data_path = "/root/multimodal-bind/processed_data"
+    opt.processed_data_path = "/root/multimodal-bind/processed_data_all" if "label" in opt.dataset_split else "/root/multimodal-bind/processed_data"
     if not os.path.exists(opt.processed_data_path):
         raise ValueError(f"{opt.processed_data_path} not found")
 
     # Set load pretrain tag
     opt.load_pretrain = "no_load"
     if ("fuse" in exp_type and "mmbind" not in exp_type) or "fuse" in exp_tag:
-        print(f"Loading pretrain for {exp_tag}_{exp_tag}")
+        print(f"=\tLoading pretrain for {exp_tag}_{exp_tag}")
         opt.load_pretrain = "load_pretrain"
+    
+    if exp_type == "baseline4" and exp_tag == "fuse_contrastive":
+        opt.dataset = "train_all_generated_AB"
+        print(f"=\tSetting dataset to train_all_generated_AB for baseline4_fuse_contrastive")
 
 
     torch.manual_seed(opt.seed)
@@ -92,10 +102,14 @@ def parse_option(exp_type, exp_tag):
     opt.valid_mods = ['acc', 'gyro'] if opt.dataset == 'train_A' else ['acc', 'mag']
 
     # set the path according to the environment
-    if "save_mmbind" in exp_type and ("unimod_autoencoder" in exp_tag or "contrastive" in exp_tag):
+    if "label" in exp_type:
+        opt.save_path = f'./{exp_type}/save_{opt.dataset}_{exp_tag}_{opt.load_pretrain}_{opt.common_modality}_{opt.seed}_{opt.dataset_split}_usepair_{opt.use_pair}/'
+    elif "save_mmbind" in exp_type and ("unimod_autoencoder" in exp_tag or "contrastive" in exp_tag):
         opt.save_path = f'./{exp_type}/save_{opt.dataset}_{exp_tag}_{opt.load_pretrain}_{opt.common_modality}_{opt.seed}_{opt.dataset_split}/'
     else:
         opt.save_path = f'./{exp_type}/save_{opt.dataset}_{exp_tag}_{opt.load_pretrain}_{opt.common_modality}_{opt.seed}_{opt.dataset_split}/'
+    
+    print(f"=\tExperiment save path: {opt.save_path}")
     opt.model_path = opt.save_path + 'models'
     opt.tb_path = opt.save_path + 'tensorboard'
     opt.result_path = opt.save_path + 'results/'

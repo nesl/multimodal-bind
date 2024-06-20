@@ -4,11 +4,8 @@ import time
 # import tensorboard_logger as tb_logger
 import torch
 import torch.backends.cudnn as cudnn
-# from torchvision import transforms, datasets
 
 import numpy as np
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import f1_score
 
 from shared_files.util import AverageMeter
 from shared_files.util import adjust_learning_rate
@@ -30,7 +27,7 @@ def set_loader(opt):
     dataset = f"./save_mmbind/train_all_paired_AB_{opt.common_modality}_{opt.seed}_{opt.dataset_split}/"
     pprint(f"=\tLoading dataset from {dataset}")
     print(f"=\tLoading dataset from {dataset}")
-    train_dataset = data.Multimodal_dataset([], ['acc', 'gyro', 'mag'], root=dataset)
+    train_dataset = data.Multimodal_dataset([], ['acc', 'gyro', 'mag'], root=dataset, opt=opt)
 
     train_loader = torch.utils.data.DataLoader(
         train_dataset, batch_size=opt.batch_size,
@@ -42,7 +39,6 @@ def set_loader(opt):
 
 def set_model(opt):
     print(f"=\tInitializing Backbone models")
-    # model = GyroMagEncoder()
     model = ModEncoder()
     criterion = ConFusionLoss(temperature=opt.temp)
 
@@ -146,11 +142,7 @@ def main():
 
         record_loss[epoch-1] = loss
 
-
-        # if epoch % opt.save_freq == 0:
-        #     save_file = os.path.join(
-        #         opt.save_folder, 'ckpt_epoch_{epoch}.pth'.format(epoch=epoch))
-        #     save_model(model, optimizer, opt, epoch, save_file)
+        pprint(f"Epoch: {epoch} - Loss: {loss}")
     
     np.savetxt(opt.result_path + f"loss_{opt.learning_rate}_{opt.epochs}.txt", record_loss)
     

@@ -30,20 +30,23 @@ class Multimodal_dataset():
 		if "train_all_paired_AB" in root:
 			index_file_path = root
 			index_files = os.listdir(root)
+		elif "generated_AB" in root:
+			index_file_path = root
+			index_files = os.listdir(root)
 		else:
 			index_file_path = os.path.join(opt.indice_file, f"{root}.txt")
 			index_files = np.loadtxt(index_file_path, dtype=str)
 
-		pprint(f"Loading Multimodal {valid_mods} datasets from {index_file_path}")
-		print(f"=\tLoading Multimodal {valid_mods} datasets from {index_file_path}")
+		pprint(f"Loading Multimodal {valid_mods} datasets from {opt.processed_data_path} - {index_file_path}")
+		print(f"=\tLoading Multimodal {valid_mods} datasets from {opt.processed_data_path} - {index_file_path}")
 
 		for file in sorted(index_files):
-			if file[-4:] != ".npy":
+			if file[-4:] != ".npy" or "generated_AB" in root:
 				continue
 
 			file_name = root + file if "train_all_paired_AB" in root else os.path.join(opt.processed_data_path, file)
 			self.data_arr.append(np.load(file_name, allow_pickle=True))
-			if "train_all_paired_AB" in root:
+			if "train_all_paired_AB" in root or "generated_AB" in root:
 				self.labels.append(int(file.split('_')[0]))
 			else:
 				self.labels.append(int(file.split('_')[1]))
@@ -71,6 +74,193 @@ class Multimodal_dataset():
 		data['data_path'] = self.file_names[idx]
 		return data
 
+
+class Multimodal_dataset_direct_load():
+	"""Build dataset from motion sensor data."""
+	def __init__(self, x1, x2, y):
+
+		self.data1 = x1.tolist() #concate and tolist
+		self.data2 = x2.tolist() #concate and tolist
+		self.labels = y.tolist() #tolist
+
+		self.data1 = torch.tensor(self.data1) # to tensor
+		self.data2 = torch.tensor(self.data2) # to tensor
+		self.labels = torch.tensor(self.labels)
+		self.labels = (self.labels).long()
+
+
+	def __len__(self):
+		return len(self.labels)
+
+	def __getitem__(self, idx):
+
+		sensor_data1 = self.data1[idx]
+		# sensor_data1 = torch.unsqueeze(sensor_data1, 0)
+
+		sensor_data2 = self.data2[idx]
+		# sensor_data2 = torch.unsqueeze(sensor_data2, 0)
+
+		activity_label = self.labels[idx]
+
+		return sensor_data1, sensor_data2, activity_label
+
+## load data for masked input
+class Multimodal_incomplete_dataset_direct_load():
+	"""Build dataset from motion sensor data."""
+	def __init__(self, x1, x2, y, mask):
+
+		self.data1 = x1.tolist() #concate and tolist
+		self.data2 = x2.tolist() #concate and tolist
+		self.labels = y.tolist() #tolist
+		self.mask = mask.tolist()
+
+		self.data1 = torch.tensor(self.data1) # to tensor
+		self.data2 = torch.tensor(self.data2) # to tensor
+		self.labels = torch.tensor(self.labels)
+		self.labels = (self.labels).long()
+		self.mask = torch.tensor(self.mask)
+
+
+	def __len__(self):
+		return len(self.labels)
+
+	def __getitem__(self, idx):
+
+		sensor_data1 = self.data1[idx]
+		# sensor_data1 = torch.unsqueeze(sensor_data1, 0)
+
+		sensor_data2 = self.data2[idx]
+		# sensor_data2 = torch.unsqueeze(sensor_data2, 0)
+
+		activity_label = self.labels[idx]
+
+		sensor_mask = self.mask[idx]
+		# sensor_mask = torch.unsqueeze(sensor_mask, 0)
+
+		return sensor_data1, sensor_data2, activity_label, sensor_mask
+		
+
+class Multimodal_generated_dataset():
+	"""Build dataset from motion sensor data."""
+	def __init__(self, valid_actions, valid_mods, root ='train_C', opt=None, data_duration=1000):
+		self.data_arr = []
+		self.labels = []
+		self.valid_mods = valid_mods
+		self.file_names = []
+
+		index_file_path = root
+		index_files = os.listdir(root)
+
+		pprint(f"Loading generated Multimodal {valid_mods} datasets from {index_file_path}")
+		print(f"=\tLoading generated Multimodal {valid_mods} datasets from {index_file_path}")
+
+		data_arr = []
+
+		mod1, mod2 = opt.valid_mod[0][1], opt.valid_mod[1][1]
+		for mod in [mod1, mod2]:
+			mod_data_arr = []
+			for file in sorted(os.listdir(os.path.join(root, mod))):
+				if file[-4:] != ".npy":
+					continue
+
+				file_name = os.path.join(root, mod, file)
+				mod_data = np.load(file_name, allow_pickle=True)
+				mod_data_arr.append(mod_data)
+			mod_data_arr = np.array(mod_data_arr)
+			data_arr.append(mod_data_arr)
+
+
+		self.data_arr = np.stack(data_arr)
+		self.labels = np.load(os.path.join(root, "label.npy"))
+	
+	def __len__(self):
+		return len(self.labels)
+
+	# Currently this is wrist only, can expand the dictionary later to include more
+	def __getitem__(self, idx):
+		data = {}
+		data[self.valid_mods[0]] = self.data_arr[0][idx]
+		data[self.valid_mods[1]] = self.data_arr[1][idx]
+
+		data['action'] = label_mapping[self.labels[idx]] - 1 # zero index
+		data['valid_mods'] = self.valid_mods
+		# data['data_path'] = self.file_names[idx]
+		return data
+
+class Multimodal_masked_dataset():
+	"""Build dataset from motion sensor data."""
+	def __init__(self, valid_actions, valid_mods, root ='train_C', opt=None, data_duration=1000):
+		self.data_arr = []
+		self.labels = []
+		self.valid_mods = valid_mods
+		self.file_names = []
+
+		if "train_all_paired_AB" in root:
+			index_file_path = root
+			index_files = os.listdir(root)
+		elif "generated_AB" in root:
+			index_file_path = root
+			index_files = os.listdir(root)
+		else:
+			index_file_path = os.path.join(opt.indice_file, f"{root}.txt")
+			index_files = np.loadtxt(index_file_path, dtype=str)
+
+		pprint(f"Loading Multimodal {valid_mods} datasets from {index_file_path}")
+		print(f"=\tLoading Multimodal {valid_mods} datasets from {index_file_path}")
+
+		for file in sorted(index_files):
+			if file[-4:] != ".npy":
+				continue
+
+			file_name = os.path.join(opt.processed_data_path, file)
+			self.data_arr.append(np.load(file_name, allow_pickle=True))
+			self.labels.append(int(file.split('_')[1]))
+			self.file_names.append(os.path.abspath(file_name))
+
+		self.data_arr = np.array(self.data_arr)
+		self.labels = np.array(self.labels)
+		print(f"=\t{root} dataset shape: {self.data_arr.shape} with valid mod {self.valid_mods}")
+
+		self.generate_mask()
+	
+	def generate_mask(self):
+		print(f"=\tGenerating Mask vector")
+		mask_vector = np.zeros((self.labels.shape[0], 3))
+		mod_index = dict(zip(["acc", "gyro", "mag"], [0, 1, 2]))
+		mask_vector[mod_index[self.valid_mods[0]]] = 1.0 # set common modality as 1
+		if len(self.valid_mods) > 1:
+			mask_vector[mod_index[self.valid_mods[1]]] = 1.0 # set other modality as 0
+		self.masks = mask_vector
+	
+	def __len__(self):
+		return len(self.labels)
+
+	# Currently this is wrist only, can expand the dictionary later to include more
+	def __getitem__(self, idx):
+		data = {}
+
+		mask = [1.0, 1.0, 1.0]
+
+		data['acc'] = (self.data_arr[idx][:, 4:6 + 1] - MEAN_OF_ACC) / STD_OF_ACC
+		data['acc'] = np.float32(data['acc'])
+
+		data['gyro'] = (self.data_arr[idx][:, 10:12 + 1] - MEAN_OF_GYRO) / STD_OF_GYRO
+		data['gyro'] =  np.float32(data['gyro'])
+
+		data['mag'] = (self.data_arr[idx][:, 13:15 + 1] - MEAN_OF_MAG) / STD_OF_MAG
+		data['mag'] =  np.float32(data['mag'])
+
+		for i, mod in enumerate(["acc", "gyro", "mag"]):
+			if mod not in self.valid_mods:
+				data[mod] = np.zeros_like(data[mod])
+				mask[i] = 0.0
+
+		data['action'] = label_mapping[self.labels[idx]] - 1 # zero index
+		data['valid_mods'] = self.valid_mods
+		data['data_path'] = self.file_names[idx]
+		data['mask'] = np.float32(np.array(mask))
+
+		return data
 
 
 class Unimodal_dataset():

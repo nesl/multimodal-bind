@@ -1,5 +1,6 @@
 #!/bin/bash
 
-python3 main_fuse_sup_mmbind.py --seed $1 --common_modality acc --learning_rate 1e-4 --weight_decay 1e-4
-python3 main_fuse_sup_mmbind.py --seed $1 --common_modality gyro --learning_rate 1e-4 --weight_decay 1e-4
-python3 main_fuse_sup_mmbind.py --seed $1 --common_modality mag --learning_rate 1e-4 --weight_decay 1e-4
+for seed in 41 42 43 44 45;
+do
+    python3 main_fuse_sup_mmbind.py --seed $seed --common_modality acc --learning_rate 1e-4 --weight_decay 1e-4 --gpu 3 --dataset_split $1
+done

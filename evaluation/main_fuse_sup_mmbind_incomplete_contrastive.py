@@ -1,17 +1,10 @@
-from __future__ import print_function
-
 import os
-import sys
-import argparse
 import time
-import math
 import random
 
-# import tensorboard_logger as tb_logger
 import torch
 import torch.backends.cudnn as cudnn
 import torch.optim as optim
-# from torchvision import transforms, datasets
 
 import numpy as np
 from sklearn.model_selection import train_test_split
@@ -21,149 +14,17 @@ from shared_files.util import AverageMeter
 from shared_files.util import adjust_learning_rate, warmup_learning_rate, accuracy
 from shared_files.util import set_optimizer, save_model
 from shared_files import data_pre as data
-from models.fuse_3M_acc_skeleton_gyro import MyUTDmodel_3M
+from models.imu_models import FullIMUEncoder, SingleIMUAutoencoder, SupervisedAccGyro, SupervisedAccMag, SupervisedGyroMag
 
-try:
-    import apex
-    from apex import amp, optimizers
-except ImportError:
-    pass
+from modules.option_utils import parse_evaluation_option
+from modules.print_utils import pprint
 
-
-def parse_option():
-    parser = argparse.ArgumentParser('argument for training')
-
-    parser.add_argument('--print_freq', type=int, default=1,
-                        help='print frequency')
-    parser.add_argument('--save_freq', type=int, default=10,
-                        help='save frequency')
-    parser.add_argument('--batch_size', type=int, default=64,
-                        help='batch_size')
-    parser.add_argument('--num_workers', type=int, default=16,
-                        help='num of workers to use')
-    parser.add_argument('--epochs', type=int, default=200,
-                        help='number of training epochs')
-    parser.add_argument('--num_positive', type=int, default=2,
-                        help='number of positive samples')
-
-    # optimization
-    parser.add_argument('--learning_rate', type=float, default=5e-4,
-                        help='learning rate')
-    parser.add_argument('--momentum', type=float, default=0.9,
-                        help='momentum')
-    parser.add_argument('--weight_decay', type=float, default=1e-4,
-                        help='weight decay')
-    parser.add_argument('--lr_decay_epochs', type=str, default='350,400,450',
-                        help='where to decay lr, can be a list')
-    parser.add_argument('--lr_decay_rate', type=float, default=0.1,
-                        help='decay rate for learning rate')
-    # temperature
-    parser.add_argument('--temp', type=float, default=0.07,
-                        help='temperature for loss function')
-
-    # model dataset
-    parser.add_argument('--model', type=str, default='MyUTDmodel')
-    parser.add_argument('--dataset', type=str, default='train_C/label_216/', help='dataset')
-    parser.add_argument('--reference_modality', type=str, default='all', help='reference_modality')
-    parser.add_argument('--load_pretrain', type=str, default='no_pretrain', help='load_pretrain or no_pretrain')
-    parser.add_argument('--contrastive', type=str, default='', help='_weighted_ or blank')
-    parser.add_argument('--num_class', type=int, default=27,
-                        help='num_class')
-
-
-    # other setting
-    parser.add_argument('--cosine', action='store_true',
-                        help='using cosine annealing')
-    parser.add_argument('--syncBN', action='store_true',
-                        help='using synchronized batch normalization')
-    parser.add_argument('--warm', action='store_true',
-                        help='warm-up for large batch training')
-    parser.add_argument('--num_of_trial', type=int, default=5,
-                        help='id for recording multiple runs')
-
-    opt = parser.parse_args()
-
-
-    return opt
-
-
-def set_seed(seed):
-    # Set the seed for Python's built-in random module
-    random.seed(seed)
-    
-    # Set the seed for numpy
-    np.random.seed(seed)
-    
-    # Set the seed for PyTorch
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)  # if you are using multi-GPU.
-    
-    # Ensure deterministic behavior in PyTorch, might affect the performance
-    # torch.backends.cudnn.deterministic = True
-    # torch.backends.cudnn.benchmark = False
-    
-    # Set the seed for other potential sources of randomness
-    os.environ['PYTHONHASHSEED'] = str(seed)
-    
-    
-def set_folder(opt, trial_id):
-   
-    opt.ckpt = '../train/save_mmbind/save_train_all_paired_AB_incomplete_contrastive_{}/models/lr_0.001_decay_0.0001_bsz_64/'.format(opt.load_pretrain)
-    source_path = "./save_{}mmbind_all_incomplete_{}/trial_{}/".format(opt.dataset, opt.load_pretrain, trial_id)
-    
-    # set the path according to the environment
-    opt.model_path = source_path + 'models/'
-    opt.tb_path = source_path + 'tensorboard/'
-    opt.result_path = source_path + 'results/'
-
-    iterations = opt.lr_decay_epochs.split(',')
-    opt.lr_decay_epochs = list([])
-    for it in iterations:
-        opt.lr_decay_epochs.append(int(it))
-
-    opt.model_name = 'lr_{}_decay_{}_bsz_{}'.\
-        format(opt.learning_rate, opt.weight_decay, opt.batch_size)
-
-    if opt.cosine:
-        opt.model_name = '{}_cosine'.format(opt.model_name)
-
-    # warm-up for large-batch training,
-    if opt.batch_size > 256:
-        opt.warm = True
-    if opt.warm:
-        opt.model_name = '{}_warm'.format(opt.model_name)
-        opt.warmup_from = 0.01
-        opt.warm_epochs = 10
-        if opt.cosine:
-            eta_min = opt.learning_rate * (opt.lr_decay_rate ** 3)
-            opt.warmup_to = eta_min + (opt.learning_rate - eta_min) * (
-                    1 + math.cos(math.pi * opt.warm_epochs / opt.epochs)) / 2
-        else:
-            opt.warmup_to = opt.learning_rate
-
-    # opt.tb_folder = os.path.join(opt.tb_path, opt.model_name)
-    # if not os.path.isdir(opt.tb_folder):
-    #     os.makedirs(opt.tb_folder)
-
-    # opt.save_folder = os.path.join(opt.model_path, opt.model_name)
-    # if not os.path.isdir(opt.save_folder):
-    #     os.makedirs(opt.save_folder)
-
-    if not os.path.isdir(opt.result_path):
-        os.makedirs(opt.result_path)
+from tqdm import tqdm
 
 def set_loader(opt):
 
-    #load labeled train and test data
-    print("train labeled data:")
-    x_train_1, x_train_2, x_train_3, y_train, mask_train = data.load_data_incomplete(opt.dataset)
-
-    print("test data:")
-    x_test_1, x_test_2, x_test_3, y_test, mask_test = data.load_data_incomplete("test")
-
-    train_dataset = data.Multimodal_incomplete_dataset(x_train_1, x_train_2, x_train_3, y_train, mask_train)
-    test_dataset = data.Multimodal_incomplete_dataset(x_test_1, x_test_2, x_test_3, y_test, mask_test)
+    train_dataset = data.Multimodal_dataset([], ['acc', 'gyro', 'mag'], root='train_C', opt=opt)
+    test_dataset = data.Multimodal_dataset([], ['acc', 'gyro', 'mag'], root='test', opt=opt)
 
     train_loader = torch.utils.data.DataLoader(
         train_dataset, batch_size=opt.batch_size,
@@ -174,41 +35,47 @@ def set_loader(opt):
 
     return train_loader, val_loader
 
-
-def load_single_modal(opt, layer_key):
-
-    ckpt_path = opt.ckpt + 'last.pth'
-    ckpt = torch.load(ckpt_path, map_location='cpu')
-    state_dict = ckpt['model']
-
-    new_state_dict = {}
-    for k, v in state_dict.items():
-        if layer_key in k:
-            k = k.replace(layer_key, "")
-            if torch.cuda.is_available():
-                k = k.replace("module.", "")
-            new_state_dict[k] = v
-    state_dict = new_state_dict
-
-    return state_dict
-
 def set_model(opt):
+
+    mod = opt.common_modality
+    mod_space = ['acc', 'gyro', 'mag']
+    multi_mod_space = [[mod, m] for m in mod_space if m != mod]
+
+    opt.valid_mod = multi_mod_space
+
+    mod1, mod2 = opt.valid_mod[0][1], opt.valid_mod[1][1]
+
+    if 'gyro' in {mod1, mod2} and 'mag' in {mod1, mod2}:
+        print(f"=\tInitializing GyroMag model")
+        model = SupervisedGyroMag()
     
-    model = MyUTDmodel_3M(input_size=1, num_classes=opt.num_class)
+    if 'acc' in {mod1, mod2} and 'mag' in {mod1, mod2}:
+        print(f"=\tInitializing AccMag model")
+        model = SupervisedAccMag()
+    
+    if 'acc' in {mod1, mod2} and 'gyro' in {mod1, mod2}:
+        print(f"=\tInitializing AccGyro model")
+        model = SupervisedAccGyro()
+    
+    # model_template = SingleIMUAutoencoder('mag') # any mod should be ok
+    model_template = FullIMUEncoder()
+
+    model_weight = f"../train/save_mmbind/save_train_AB_incomplete_contrastive_no_load_{opt.common_modality}_{opt.seed}_{opt.dataset_split}/models/lr_0.0001_decay_0.0001_bsz_64/last.pth"
+    pprint(f"=\tLoad {mod} (masked) weight from {model_weight}")
+    
+    model_template.load_state_dict(torch.load(model_weight)['model'])
+    setattr(model, f"{mod1}_encoder", getattr(model_template, f"{mod1}_encoder"))
+    setattr(model, f"{mod2}_encoder", getattr(model_template, f"{mod2}_encoder"))
 
     criterion = torch.nn.CrossEntropyLoss()
 
+    # enable synchronized Batch Normalization
+
     if torch.cuda.is_available():
-        if torch.cuda.device_count() > 1:
-            model = torch.nn.DataParallel(model)
         model = model.cuda()
         criterion = criterion.cuda()
         cudnn.benchmark = True
-
-    model.acc_encoder.load_state_dict(load_single_modal(opt, 'acc_encoder.'))
-    model.gyro_encoder.load_state_dict(load_single_modal(opt, 'gyro_encoder.'))
-    model.skeleton_encoder.load_state_dict(load_single_modal(opt, 'skeleton_encoder.'))
-        
+    
     return model, criterion
 
 
@@ -225,21 +92,15 @@ def train(train_loader, model, criterion, optimizer, epoch, opt):
     end = time.time()
 
 
-    for idx, (input_data1, input_data2, input_data3, labels, mask) in enumerate(train_loader):
+    for idx, batched_data in enumerate(train_loader):
         data_time.update(time.time() - end)
 
+        labels = batched_data['action']
         if torch.cuda.is_available():
-            input_data1 = input_data1.cuda()
-            input_data2 = input_data2.cuda()
-            input_data3 = input_data3.cuda()
             labels = labels.cuda()
-            mask = mask.cuda()
-        bsz = input_data1.shape[0]
+        bsz = labels.shape[0]
 
-        # warm-up learning rate
-        # warmup_learning_rate(opt, epoch, idx, len(train_loader), optimizer)
-
-        output = model(input_data1, input_data2, input_data3, mask)
+        output = model(batched_data)
 
         loss = criterion(output, labels)
 
@@ -256,17 +117,6 @@ def train(train_loader, model, criterion, optimizer, epoch, opt):
         # measure elapsed time
         batch_time.update(time.time() - end)
         end = time.time()
-
-        # print info
-        if (idx + 1) % opt.print_freq == 0:
-            print('Train: [{0}][{1}/{2}]\t'
-                  'BT {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
-                  'DT {data_time.val:.3f} ({data_time.avg:.3f})\t'
-                  'loss {loss.val:.3f} ({loss.avg:.3f})\t'
-                  'Acc@1 {top1.val:.3f} ({top1.avg:.3f})'.format(
-                   epoch, idx + 1, len(train_loader), batch_time=batch_time,
-                   data_time=data_time, loss=losses, top1=top1))
-            sys.stdout.flush()
 
     return losses.avg, top1.avg
 
@@ -285,147 +135,129 @@ def validate(val_loader, model, criterion, opt):
 
     with torch.no_grad():
         end = time.time()
-        for idx, (input_data1, input_data2, input_data3, labels, mask) in enumerate(val_loader):
+        for idx, batched_data in enumerate(val_loader):
+
+            labels = batched_data['action']
 
             if torch.cuda.is_available():
-                input_data1 = input_data1.cuda()
-                input_data2 = input_data2.cuda()
-                input_data3 = input_data3.cuda()
                 labels = labels.cuda()
-                mask = mask.cuda()
             bsz = labels.shape[0]
 
-            # forward
-            output = model(input_data1, input_data2, input_data3, mask)   
+            # warm-up learning rate
+            # warmup_learning_rate(opt, epoch, idx, len(train_loader), optimizer)
 
-            loss = criterion(output, labels)
+            output = model(batched_data)
 
-            # update metric
-            losses.update(loss.item(), bsz)
-            acc, _ = accuracy(output, labels, topk=(1, 5))
-            top1.update(acc[0], bsz)
-
-            # calculate and store confusion matrix
             label_list.extend(labels.cpu().numpy())
             pred_list.extend(output.max(1)[1].cpu().numpy())
 
+
+            loss = criterion(output, labels)
+
             rows = labels.cpu().numpy()
             cols = output.max(1)[1].cpu().numpy()
+
+            # print("labels:",rows)
+            # print("output:",cols)
+            # print("old confusion:",confusion)
 
             for label_index in range(labels.shape[0]):
                 confusion[rows[label_index], cols[label_index]] += 1
 
             # update metric
-            losses.update(loss.item(), bsz)
+            # acc, rec, prec, target_positive, pred_positive = rate_eval(output, labels, opt.num_class, topk=(1, 5))
             acc, _ = accuracy(output, labels, topk=(1, 5))
+            # print("Compare acc, rec:", acc, rec)
+
+            losses.update(loss.item(), bsz)
             top1.update(acc[0], bsz)
 
             # measure elapsed time
             batch_time.update(time.time() - end)
             end = time.time()
 
-
-            if idx % opt.print_freq == 0:
-                print('Test: [{0}/{1}]\t'
-                      'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
-                      'Loss {loss.val:.4f} ({loss.avg:.4f})\t'
-                      'Acc@1 {top1.val:.3f} ({top1.avg:.3f})'.format(
-                       idx, len(val_loader), batch_time=batch_time,
-                       loss=losses, top1=top1))
-
     F1score_test = f1_score(label_list, pred_list, average="macro") # macro sees all class with the same importance
 
-    print(' * Acc@1 {top1.avg:.3f}\t'
+    pprint(' * Acc@1 {top1.avg:.3f}\t'
         'F1-score {F1score_test:.3f}\t'.format(top1=top1, F1score_test=F1score_test))
 
     return losses.avg, top1.avg, confusion, F1score_test, label_list, pred_list
 
 
 def main():
+    best_acc = 0
+    best_rec = 0
+    best_prec = 0
+    opt = parse_evaluation_option("sup_mmbind_incomplete", "sup_mmbind_incomplete")
 
-    opt = parse_option()
-    seed = [42, 43, 44, 45, 46]
+    # build data loader
+    train_loader, val_loader = set_loader(opt)
 
-    for trial_id in range(opt.num_of_trial):
+    # build model and criterion
+    model, criterion = set_model(opt)
 
-        opt = parse_option()
+    # build optimizer
+    optimizer = optim.Adam(model.parameters(),lr=opt.learning_rate,
+                # momentum=opt.momentum,
+                weight_decay=opt.weight_decay)
 
-        set_folder(opt, trial_id)
-        set_seed(seed[trial_id])
+    # tensorboard
+    # logger = tb_logger.Logger(logdir=opt.tb_folder, flush_secs=2)
 
-        best_acc = 0
-        best_f1 = 0
+    record_acc = np.zeros(opt.epochs)
+    record_f1 = np.zeros(opt.epochs)
+    record_loss = np.zeros(opt.epochs)
+    record_acc_train = np.zeros(opt.epochs)
 
-        # build data loader
-        train_loader, test_loader = set_loader(opt)
+    # training routine
+    pprint(f"Start Training")
+    for epoch in tqdm(range(1, opt.epochs + 1), desc=f'Epoch: ', unit='items', ncols=80, colour='green', bar_format='{l_bar}{bar}| {n_fmt}/{total_fmt}[{elapsed}<{remaining}]'):
+        adjust_learning_rate(opt, optimizer, epoch)
 
-        # build model and criterion
-        model, criterion = set_model(opt)
+        # train for one epoch
+        loss, train_acc = train(train_loader, model, criterion, optimizer, epoch, opt)
 
-        # build optimizer
-        optimizer = optim.Adam([ 
-                    {'params': model.acc_encoder.parameters(), 'lr': 1e-4},   # 0
-                    {'params': model.gyro_encoder.parameters(), 'lr': 1e-4},   # 0
-                    {'params': model.skeleton_encoder.parameters(), 'lr': 1e-4},   # 0
-                    {'params': model.classifier.parameters(), 'lr': opt.learning_rate}],
-                    # momentum=opt.momentum,
-                    weight_decay=opt.weight_decay)
 
-        # tensorboard
-        # logger = tb_logger.Logger(logdir=opt.tb_folder, flush_secs=2)
+        # evaluation
+        val_loss, val_acc, confusion, val_F1score, label_list, pred_list = validate(val_loader, model, criterion, opt)
 
-        record_acc = np.zeros(opt.epochs)
-        record_f1 = np.zeros(opt.epochs)
-        record_loss = np.zeros(opt.epochs)
-        record_acc_train = np.zeros(opt.epochs)
 
-        # training routine
-        for epoch in range(1, opt.epochs + 1):
-            adjust_learning_rate(opt, optimizer, epoch)
+        if val_acc > best_acc:
+            best_acc = val_acc
 
-            # train for one epoch
-            time1 = time.time()
-            loss, train_acc = train(train_loader, model, criterion, optimizer, epoch, opt)
-            time2 = time.time()
-            print('Train epoch {}, total time {:.2f}, accuracy:{:.2f}'.format(
-                epoch, time2 - time1, train_acc))
+        record_loss[epoch-1] = loss
+        record_acc[epoch-1] = val_acc
+        record_f1[epoch-1] = val_F1score
+        record_acc_train[epoch-1] = train_acc
+        
+        # if epoch % opt.save_freq == 0:
+        #     save_file = os.path.join(
+        #         opt.save_folder, 'ckpt_epoch_{epoch}.pth'.format(epoch=epoch))
+        #     save_model(model, optimizer, opt, epoch, save_file)
 
-            # eval for one epoch
-            val_loss, val_acc, confusion, val_F1score, label_list, pred_list = validate(test_loader, model, criterion, opt)
-            if val_acc > best_acc:
-                best_acc = val_acc
-                best_f1 = val_F1score
+        label_list = np.array(label_list)
+        pred_list = np.array(pred_list)
+        np.savetxt(os.path.join(opt.result_folder , "confusion.txt"), confusion)
+        np.savetxt(os.path.join(opt.result_folder , "label.txt"), label_list)
+        np.savetxt(os.path.join(opt.result_folder , "pred.txt"), pred_list)
+        np.savetxt(os.path.join(opt.result_folder , "loss.txt"), record_loss)
+        np.savetxt(os.path.join(opt.result_folder , "test_accuracy.txt"), record_acc)
+        np.savetxt(os.path.join(opt.result_folder , "test_f1.txt"), record_f1)
+        np.savetxt(os.path.join(opt.result_folder , "train_accuracy.txt"), record_acc_train)
+    
+    # save the last model
+    save_file = os.path.join(opt.save_folder, 'last.pth')
+    save_model(model, optimizer, opt, opt.epochs, save_file)
 
-            record_loss[epoch-1] = loss
-            record_acc[epoch-1] = val_acc
-            record_f1[epoch-1] = val_F1score
-            record_acc_train[epoch-1] = train_acc
+    # print("result of {}:".format(opt.dataset))
+    print('best accuracy: {:.3f}'.format(best_acc))
+    print('last accuracy: {:.3f}'.format(val_acc))
+    print('final F1:{:.3f}'.format(val_F1score))
 
-            # if epoch % opt.save_freq == 0:
-            #     save_file = os.path.join(
-            #         opt.save_folder, 'ckpt_epoch_{epoch}.pth'.format(epoch=epoch))
-            #     save_model(model, optimizer, opt, epoch, save_file)
-
-            label_list = np.array(label_list)
-            pred_list = np.array(pred_list)
-            np.savetxt(opt.result_path+ "confusion.txt", confusion)
-            np.savetxt(opt.result_path + "label.txt", label_list)
-            np.savetxt(opt.result_path + "pred.txt", pred_list)
-            np.savetxt(opt.result_path + "loss.txt", record_loss)
-            np.savetxt(opt.result_path + "test_accuracy.txt", record_acc)
-            np.savetxt(opt.result_path + "test_f1.txt", record_f1)
-            np.savetxt(opt.result_path + "train_accuracy.txt", record_acc_train)
-
-        # save the last model
-        # save_file = os.path.join(
-        #     opt.save_folder, 'last.pth')
-        # save_model(model, optimizer, opt, opt.epochs, save_file)
-
-        print("Trial: ", trial_id)
-        print('best accuracy: {:.3f}'.format(best_acc))
-        print('best F1:{:.3f}'.format(best_f1))
-        print('last accuracy: {:.3f}'.format(val_acc))
-        print('final F1:{:.3f}'.format(val_F1score))
+    pprint('best accuracy: {:.3f}'.format(best_acc))
+    pprint('last accuracy: {:.3f}'.format(val_acc))
+    pprint('final F1:{:.3f}'.format(val_F1score))
+    # print("confusion:{:.3f}", confusion)
 
 
 if __name__ == '__main__':

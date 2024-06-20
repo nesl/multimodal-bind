@@ -1,4 +1,5 @@
 import numpy as np
+from modules.print_utils import pprint
 import torch
 from sklearn.model_selection import train_test_split
 import random
@@ -16,7 +17,12 @@ random.seed(0)
 
 all_data_folder = '../../UTD-split-0507/UTD-split-0507-222-1/'
 
+# [1, 3, 4, 12, 13, 16, 17]
+# 1, 3, 5, 7, 17, 24
 label_mapping = np.array([-1, 1, -1, 2, 3, -1, -1, -1, -1, -1, -1, -1, 4, 5, -1, -1, 6, 7])
+# label_mapping = np.array([-1, 1, -1, 2, 3, -1, -1, -1, -1, -1, -1, -1, 4, 5, -1, -1, 6, 7])
+# label_mapping = dict(zip([1, 3, 5, 7, 17, 24], [0, 1, 2, 3, 4, 5]))
+other_label_mapping = dict(zip(sorted([12, 16, 2, 13, 6, 4, 3, 1, 5, 17, 7, 24]), np.arange(len([12, 16, 2, 13, 6, 4, 3, 1, 5, 17, 7, 24]))))
 ## load original data
 class Multimodal_dataset():
 	"""Build dataset from motion sensor data."""
@@ -24,6 +30,7 @@ class Multimodal_dataset():
 		self.data_arr = []
 		self.labels = []
 		self.valid_mods = valid_mods
+		self.opt = opt
 
 		index_file_path = os.path.join(opt.indice_file, f"{root}.txt")
 		index_files = np.loadtxt(index_file_path, dtype=str)
@@ -50,10 +57,84 @@ class Multimodal_dataset():
 			data['mag'] = (self.data_arr[idx][:, 13:15 + 1] - MEAN_OF_MAG) / STD_OF_MAG
 			data['mag'] =  np.float32(data['mag'])
 		data['action'] = label_mapping[self.labels[idx]] - 1 # zero index
+		# data['action'] = label_mapping[self.labels[idx]] if "single_mod" not in self.opt.exp_tag else other_label_mapping[self.labels[idx]]
 		data['valid_mods'] = self.valid_mods
 		return data
 
+class Multimodal_masked_dataset():
+	"""Build dataset from motion sensor data."""
+	def __init__(self, valid_actions, valid_mods, root ='train_C', opt=None, data_duration=1000):
+		self.data_arr = []
+		self.labels = []
+		self.valid_mods = valid_mods
+		self.file_names = []
 
+		if "train_all_paired_AB" in root:
+			index_file_path = root
+			index_files = os.listdir(root)
+		elif "generated_AB" in root:
+			index_file_path = root
+			index_files = os.listdir(root)
+		else:
+			index_file_path = os.path.join(opt.indice_file, f"{root}.txt")
+			index_files = np.loadtxt(index_file_path, dtype=str)
+
+		pprint(f"Loading Multimodal {valid_mods} datasets from {index_file_path}")
+		print(f"=\tLoading Multimodal {valid_mods} datasets from {index_file_path}")
+
+		for file in sorted(index_files):
+			if file[-4:] != ".npy":
+				continue
+
+			file_name = os.path.join(opt.processed_data_path, file)
+			self.data_arr.append(np.load(file_name, allow_pickle=True))
+			self.labels.append(int(file.split('_')[1]))
+			self.file_names.append(os.path.abspath(file_name))
+
+		self.data_arr = np.array(self.data_arr)
+		self.labels = np.array(self.labels)
+		print(f"=\t{root} dataset shape: {self.data_arr.shape} with valid mod {self.valid_mods}")
+
+		self.generate_mask()
+	
+	def generate_mask(self):
+		print(f"=\tGenerating Mask vector")
+		mask_vector = np.zeros((self.labels.shape[0], 3))
+		mod_index = dict(zip(["acc", "gyro", "mag"], [0, 1, 2]))
+		mask_vector[mod_index[self.valid_mods[0]]] = 1.0 # set common modality as 1
+		mask_vector[mod_index[self.valid_mods[1]]] = 1.0 # set other modality as 0
+		self.masks = mask_vector
+	
+	def __len__(self):
+		return len(self.labels)
+
+	# Currently this is wrist only, can expand the dictionary later to include more
+	def __getitem__(self, idx):
+		data = {}
+
+		mask = [1.0, 1.0, 1.0]
+
+		data['acc'] = (self.data_arr[idx][:, 4:6 + 1] - MEAN_OF_ACC) / STD_OF_ACC
+		data['acc'] = np.float32(data['acc'])
+
+		data['gyro'] = (self.data_arr[idx][:, 10:12 + 1] - MEAN_OF_GYRO) / STD_OF_GYRO
+		data['gyro'] =  np.float32(data['gyro'])
+
+		data['mag'] = (self.data_arr[idx][:, 13:15 + 1] - MEAN_OF_MAG) / STD_OF_MAG
+		data['mag'] =  np.float32(data['mag'])
+
+		for i, mod in enumerate(["acc", "gyro", "mag"]):
+			if mod not in self.valid_mods:
+				data[mod] = np.zeros_like(data[mod])
+				mask[i] = 0.0
+
+		# data['action'] = label_mapping[self.labels[idx]] - 1 # zero index
+		data['action'] = label_mapping[self.labels[idx]] # zero index
+		data['valid_mods'] = self.valid_mods
+		data['data_path'] = self.file_names[idx]
+		data['mask'] = np.float32(np.array(mask))
+
+		return data
 
 class Unimodal_dataset():
 	"""Build dataset from motion sensor data."""

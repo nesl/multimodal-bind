@@ -12,132 +12,65 @@ import torch.backends.cudnn as cudnn
 # from torchvision import transforms, datasets
 
 import numpy as np
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import f1_score
 
-from shared_files.util import AverageMeter
-from shared_files.util import adjust_learning_rate, warmup_learning_rate, accuracy
-from shared_files.util import set_optimizer, save_model
+from torch.utils.data import ConcatDataset
+from shared_files.util import AverageMeter, adjust_learning_rate, set_optimizer, save_model
 from shared_files import data_pre as data
 
-from models.fuse_2M_acc_gyro import MyUTDmodel_2M_contrastive
-from shared_files.contrastive_design_2M import FeatureConstructor, ConFusionLoss
+from models.imu_models import FullIMUEncoder, SingleIMUAutoencoder
+from shared_files.contrastive_design_3M import ConFusionLoss
+from shared_files.contrastive_design import FeatureConstructor
 
+from tqdm import tqdm
+from modules.option_utils import parse_option
+from modules.print_utils import pprint
 
+def collate_fn_pad(batch):
+    for i in range(len(batch)):
+        if ('acc' not in batch[i]):
+            batch[i]['acc'] = np.zeros((1000, 3))
+        if ('gyro' not in batch[i]):
+            batch[i]['gyro'] = np.zeros((1000, 3))
+        if ('mag' not in batch[i]):
+            batch[i]['mag'] = np.zeros((1000, 3))
 
-try:
-    import apex
-    from apex import amp, optimizers
-except ImportError:
-    pass
-
-
-def parse_option():
-    parser = argparse.ArgumentParser('argument for training')
-
-    parser.add_argument('--print_freq', type=int, default=1,
-                        help='print frequency')
-    parser.add_argument('--save_freq', type=int, default=20,
-                        help='save frequency')
-    parser.add_argument('--batch_size', type=int, default=64,
-                        help='batch_size')
-    parser.add_argument('--num_workers', type=int, default=16,
-                        help='num of workers to use')
-    parser.add_argument('--epochs', type=int, default=300,
-                        help='number of training epochs')
-
-    # optimization
-    parser.add_argument('--learning_rate', type=float, default=1e-4,
-                        help='learning rate')
-    parser.add_argument('--momentum', type=float, default=0.9,
-                        help='momentum')
-    parser.add_argument('--weight_decay', type=float, default=1e-4,
-                        help='weight decay')
-    parser.add_argument('--lr_decay_epochs', type=str, default='350,400,450',
-                        help='where to decay lr, can be a list')
-    parser.add_argument('--lr_decay_rate', type=float, default=0.1,
-                        help='decay rate for learning rate')
-
-    # model dataset
-    parser.add_argument('--model', type=str, default='MyUTDmodel')
-    parser.add_argument('--dataset', type=str, default='train_all_generated_AB', help='dataset')
-    parser.add_argument('--load_pretrain', type=str, default='load_pretrain', help='load_pretrain or no_pretrain')
-    parser.add_argument('--num_class', type=int, default=27,
-                        help='num_class')
-    # temperature
-    parser.add_argument('--temp', type=float, default=0.07,
-                        help='temperature for loss function')
-
-    # other setting
-    parser.add_argument('--cosine', action='store_true',
-                        help='using cosine annealing')
-    parser.add_argument('--syncBN', action='store_true',
-                        help='using synchronized batch normalization')
-    parser.add_argument('--warm', action='store_true',
-                        help='warm-up for large batch training')
-    parser.add_argument('--trial', type=str, default='0',
-                        help='id for recording multiple runs')
-
-    opt = parser.parse_args()
-
-    # set the path according to the environment
-    opt.save_path = "./save_baseline4/save_{}_contrastive_{}/".format(opt.dataset, opt.load_pretrain)
-    opt.model_path = opt.save_path + 'models'
-    opt.tb_path = opt.save_path + 'tensorboard'
-    opt.result_path = opt.save_path + 'results/'
-
-    iterations = opt.lr_decay_epochs.split(',')
-    opt.lr_decay_epochs = list([])
-    for it in iterations:
-        opt.lr_decay_epochs.append(int(it))
-
-    opt.model_name = 'lr_{}_decay_{}_bsz_{}'.\
-        format(opt.learning_rate, opt.weight_decay, opt.batch_size)
-
-    if opt.cosine:
-        opt.model_name = '{}_cosine'.format(opt.model_name)
-
-    # warm-up for large-batch training,
-    if opt.batch_size > 256:
-        opt.warm = True
-    if opt.warm:
-        opt.model_name = '{}_warm'.format(opt.model_name)
-        opt.warmup_from = 0.01
-        opt.warm_epochs = 10
-        if opt.cosine:
-            eta_min = opt.learning_rate * (opt.lr_decay_rate ** 3)
-            opt.warmup_to = eta_min + (opt.learning_rate - eta_min) * (
-                    1 + math.cos(math.pi * opt.warm_epochs / opt.epochs)) / 2
-        else:
-            opt.warmup_to = opt.learning_rate
-
-    opt.tb_folder = os.path.join(opt.tb_path, opt.model_name)
-    if not os.path.isdir(opt.tb_folder):
-        os.makedirs(opt.tb_folder)
-
-    opt.save_folder = os.path.join(opt.model_path, opt.model_name)
-    if not os.path.isdir(opt.save_folder):
-        os.makedirs(opt.save_folder)
-
-    if not os.path.isdir(opt.result_path):
-        os.makedirs(opt.result_path)
-
-    return opt
-
+    batched_data = {
+        'valid_mods': [sample['valid_mods'] for sample in batch],
+        'gyro': [torch.FloatTensor(sample['gyro']) for sample in batch],
+        'acc': [torch.FloatTensor(sample['acc']) for sample in batch],
+        'mag': [torch.FloatTensor(sample['mag']) for sample in batch],
+    }
+    batched_data['gyro'] = torch.stack(batched_data['gyro'])
+    batched_data['mag'] = torch.stack(batched_data['mag'])
+    batched_data['acc'] = torch.stack(batched_data['acc'])
+    return batched_data
 
 def set_loader(opt):
 
-    #load labeled train and test data
-    print("train data:")
-    if opt.dataset == "train_all_generated_AB":
-        x_train_1, x_train_2, label = data.load_all_generated_data()
-    else:
-        x_train_1, x_train_2, label = data.load_generated_data(opt.dataset)
+    mod = opt.common_modality
+    mod_space = ['acc', 'gyro', 'mag']
+    multi_mod_space = [[mod, m] for m in mod_space if m != mod]
 
-    train_dataset = data.Multimodal_dataset(x_train_1, x_train_2, label)
+    opt.valid_mod = multi_mod_space
+
+    print(f"=\tInitializing Dataloader")
+    #load labeled train and test data
+
+    dataset_A = f"./save_baseline4/train_A_generated_AB_{opt.common_modality}_{opt.seed}_{opt.dataset_split}/"
+    dataset_B = f"./save_baseline4/train_B_generated_AB_{opt.common_modality}_{opt.seed}_{opt.dataset_split}/"
+    
+    pprint(f"=\tLoading dataset from {dataset_A}")
+    print(f"=\tLoading dataset from {dataset_A}")
+
+    pprint(f"=\tLoading dataset from {dataset_B}")
+    print(f"=\tLoading dataset from {dataset_B}")
+
+    train_datasetA = data.Multimodal_generated_dataset([], opt.valid_mod[0], root=dataset_A, opt=opt)
+    train_datasetB = data.Multimodal_generated_dataset([], opt.valid_mod[1], root=dataset_B, opt=opt)
+    train_dataset = ConcatDataset([train_datasetA, train_datasetB])
 
     train_loader = torch.utils.data.DataLoader(
-        train_dataset, batch_size=opt.batch_size,
+        train_dataset, batch_size=opt.batch_size, collate_fn=collate_fn_pad, 
         num_workers=opt.num_workers, pin_memory=True, shuffle=True, drop_last=True)
 
     return train_loader
@@ -169,23 +102,33 @@ def load_single_modal(opt, layer_key):
 
 def set_model(opt):
 
-    model = MyUTDmodel_2M_contrastive(input_size=1)
+    model = FullIMUEncoder()
     criterion = ConFusionLoss(temperature=opt.temp)
 
-    # enable synchronized Batch Normalization
-    if opt.syncBN:
-        model = apex.parallel.convert_syncbn_model(model)
+    if opt.load_pretrain == "load_pretrain":
+        pprint(f"Loading pretrained model")
+        print(f"=\tLoading pretrained model")
 
+        mod1, mod2 = opt.valid_mod[0][1], opt.valid_mod[1][1]
+
+        mod1_weight = f"./save_baseline1/save_train_A_autoencoder_no_load_{opt.common_modality}_{opt.seed}_{opt.dataset_split}/models/lr_0.0001_decay_0.0001_bsz_64/last.pth"
+        mod2_weight = f"./save_baseline1/save_train_A_autoencoder_no_load_{opt.common_modality}_{opt.seed}_{opt.dataset_split}/models/lr_0.0001_decay_0.0001_bsz_64/last.pth"
+
+        model_template = SingleIMUAutoencoder('acc')
+        state_dict_1 = torch.load(mod1_weight)['model']
+        model_template.load_state_dict(state_dict_1)
+        setattr(model, f"{mod1}_encoder", model_template.encoder)
+
+        state_dict_2 = torch.load(mod2_weight)['model']
+        model_template.load_state_dict(state_dict_2)
+        setattr(model, f"{mod2}_encoder", model_template.encoder)
+    
     if torch.cuda.is_available():
         if torch.cuda.device_count() > 1:
             model = torch.nn.DataParallel(model)
         model = model.cuda()
         criterion = criterion.cuda()
         cudnn.benchmark = True
-
-    if opt.load_pretrain == "load_pretrain":
-        model.acc_encoder.load_state_dict(load_single_modal(opt, 'acc_encoder.'))
-        model.gyro_encoder.load_state_dict(load_single_modal(opt, 'gyro_encoder.'))
 
     return model, criterion
 
@@ -200,20 +143,21 @@ def train(train_loader, model, criterion, optimizer, epoch, opt):
 
     end = time.time()
 
-    for idx, (input_data1, input_data2, similarity) in enumerate(train_loader):
-        data_time.update(time.time() - end)
+    for _, batched_data in enumerate(train_loader):
+        acc_embed, gyro_embed, mag_embed = model(batched_data)
+        embed = {
+            "acc": acc_embed,
+            "gyro": gyro_embed,
+            "mag": mag_embed
+        }
 
-        if torch.cuda.is_available():
-            input_data1 = input_data1.cuda()
-            input_data2 = input_data2.cuda()
-        bsz = input_data1.shape[0]
+        bsz = gyro_embed.shape[0]
 
-        # warm-up learning rate
-        # warmup_learning_rate(opt, epoch, idx, len(train_loader), optimizer)
+        embed1 = embed[opt.valid_mod[0][1]]
+        embed2 = embed[opt.valid_mod[1][1]]
 
-        feature1, feature2 = model(input_data1, input_data2)
         
-        features = FeatureConstructor(feature1, feature2, 2)
+        features = FeatureConstructor(embed1, embed2, 2)
 
         loss = criterion(features)
         losses.update(loss.item(), bsz)
@@ -227,21 +171,11 @@ def train(train_loader, model, criterion, optimizer, epoch, opt):
         batch_time.update(time.time() - end)
         end = time.time()
 
-        # print info
-        if (idx + 1) % opt.print_freq == 0:
-            print('Train: [{0}][{1}/{2}]\t'
-                  'BT {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
-                  'DT {data_time.val:.3f} ({data_time.avg:.3f})\t'
-                  'loss {loss.val:.3f} ({loss.avg:.3f})\t'.format(
-                   epoch, idx + 1, len(train_loader), batch_time=batch_time,
-                   data_time=data_time, loss=losses))
-            sys.stdout.flush()
-
     return losses.avg
 
 
 def main():
-    opt = parse_option()
+    opt = parse_option("save_baseline4", "fuse_contrastive")
 
     # build data loader
     train_loader = set_loader(opt)
@@ -258,25 +192,19 @@ def main():
     record_loss = np.zeros(opt.epochs)
 
     # training routine
-    for epoch in range(1, opt.epochs + 1):
+    pprint(f"Start Training")
+    for epoch in tqdm(range(1, opt.epochs + 1), desc=f'Epoch: ', unit='items', ncols=80, colour='green', bar_format='{l_bar}{bar}| {n_fmt}/{total_fmt}[{elapsed}<{remaining}]'):
         adjust_learning_rate(opt, optimizer, epoch)
 
         # train for one epoch
-        time1 = time.time()
         loss = train(train_loader, model, criterion, optimizer, epoch, opt)
-        time2 = time.time()
-
-        print('epoch {}, total time {:.2f}'.format(epoch, time2 - time1))
-
         record_loss[epoch-1] = loss
 
+        pprint(f"Epoch {epoch} - Loss: {loss}")
 
-        if epoch % opt.save_freq == 0:
-            save_file = os.path.join(
-                opt.save_folder, 'ckpt_epoch_{epoch}.pth'.format(epoch=epoch))
-            save_model(model, optimizer, opt, epoch, save_file)
-
-        np.savetxt(opt.result_path + "loss_{}_{}.txt".format(opt.learning_rate, opt.batch_size), record_loss)
+    
+    # save the last model
+    np.savetxt(opt.result_path + f"loss_{opt.learning_rate}_{opt.epochs}.txt", record_loss)
     
     # save the last model
     save_file = os.path.join(

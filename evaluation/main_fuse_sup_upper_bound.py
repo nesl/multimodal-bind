@@ -67,10 +67,10 @@ def set_model(opt):
         print(f"=\tInitializing AccGyro model")
         model = SupervisedAccGyro()
 
-    # model = SupervisedGyroMag()
     model_template = ModEncoder()
 
-    weight = f"../train/save_upper_bound/save_train_AB_fuse_contrastive_load_pretrain_{mod}_{opt.seed}_{opt.dataset_split}/models/lr_0.0001_decay_0.0001_bsz_64/last.pth"
+    # weight = f"../train/save_upper_bound/save_train_AB_fuse_contrastive_load_pretrain_{mod}_{opt.seed}_{opt.dataset_split}/models/lr_1e-05_decay_0.0001_bsz_64/last.pth"
+    weight = f"../train/save_upper_bound/save_train_AB_fuse_contrastive_full_load_pretrain_{mod}_{opt.seed}_{opt.dataset_split}/models/lr_0.0001_decay_0.0001_bsz_64/last.pth"
     model_template.load_state_dict(torch.load(weight)['model'])
 
     setattr(model, f"{mod1}_encoder", getattr(model_template, f"{mod1}_encoder"))

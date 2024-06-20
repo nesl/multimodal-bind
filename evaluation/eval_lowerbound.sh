@@ -8,10 +8,14 @@
 #!/bin/bash
 for seed in 41 42 43 44 45;
 do
-    # bash ./train_mmbind.sh $seed 0
-    python3 main_fuse_sup_lower_bound.py --seed $seed --common_modality acc --gpu 0
-    python3 main_fuse_sup_lower_bound.py --seed $seed --common_modality gyro --gpu 0
-    python3 main_fuse_sup_lower_bound.py --seed $seed --common_modality mag --gpu 0
+    # python3 main_fuse_sup_lower_bound_abc.py --seed $seed --common_modality acc --gpu 3 --dataset_split split_0
+    python3 main_fuse_sup_lower_bound_abc.py --seed $seed --common_modality gyro --gpu 3 --dataset_split split_0
+    python3 main_fuse_sup_lower_bound_abc.py --seed $seed --common_modality mag --gpu 3 --dataset_split split_0
 done
 
-# ../train/save_mmbind/save_train_AB_contrastive_no_load_mag_41_split_0/models/lr_5e-05_decay_0.0001_bsz_64/last.pt
+# for seed in 41 42 43 44 45;
+# do
+#     python3 main_sup_unimod.py --seed $seed --common_modality acc --learning_rate 1e-4 --weight_decay 1e-4 --gpu 3 --dataset_split split_label0
+#     python3 main_sup_unimod.py --seed $seed --common_modality gyro --learning_rate 1e-4 --weight_decay 1e-4 --gpu 3 --dataset_split split_label0
+#     python3 main_sup_unimod.py --seed $seed --common_modality mag --learning_rate 1e-4 --weight_decay 1e-4 --gpu 3 --dataset_split split_label0
+# done

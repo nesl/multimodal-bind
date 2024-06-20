@@ -64,9 +64,10 @@ def parse_evaluation_option(exp_type, exp_tag):
     opt.indice_file = f"../indices/{opt.dataset_split}"
     if not os.path.exists(opt.indice_file):
         raise ValueError(f"{opt.indice_file} not found, please generate with preprocess.py/generate_index.py")
-    opt.processed_data_path = "/root/multimodal-bind/processed_data"
+    opt.processed_data_path = "/root/multimodal-bind/processed_data_all" if "label" in opt.dataset_split else "/root/multimodal-bind/processed_data"
     if not os.path.exists(opt.processed_data_path):
         raise ValueError(f"{opt.processed_data_path} not found")
+
 
     torch.manual_seed(opt.seed)
     np.random.seed(opt.seed)
@@ -125,6 +126,8 @@ def parse_evaluation_option(exp_type, exp_tag):
     # minor gpu setting, ignore 
     if opt.gpu != -1:
         select_gpu(opt.gpu)
+    
+    opt.exp_tag = exp_tag
 
     return opt
 

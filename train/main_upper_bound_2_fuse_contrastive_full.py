@@ -57,7 +57,7 @@ def set_model(opt):
     criterion = ConFusionLoss(temperature=opt.temp)
 
  
-    if opt.load_pretrain == "load_pretrain":
+    if opt.load_pretrain == "load_pretrain" and False:
         print("=\tLoading pretrained weights from step 1")
         print(f"=\tLoading IMUEncoder as template for {mod}")
         model_template = SingleIMUAutoencoder(mod) # any mod should be fine
@@ -69,6 +69,9 @@ def set_model(opt):
 
         model_template.load_state_dict(torch.load(f'./save_upper_bound/unimodal_pretrain/save_train_AB_autoencoder_no_load_{mod2}_{opt.seed}_{opt.dataset_split}/models/lr_0.0001_decay_0.0001_bsz_64/last.pth')['model'])
         setattr(model, f"{mod2}_encoder", model_template.encoder)
+    
+    else:
+        print(f"=\tDo not load pretrained weights, start from scratch")
 
     if torch.cuda.is_available():
         model = model.cuda()
@@ -93,17 +96,10 @@ def train(train_loader, model, criterion, optimizer, epoch, opt):
         data_time.update(time.time() - end)
 
         acc_embed, gyro_embed, mag_embed = model(batched_data)
-        embed = {
-            "acc": acc_embed,
-            "gyro": gyro_embed,
-            "mag": mag_embed
-        }
 
         bsz = gyro_embed.shape[0]
 
-        embed1 = embed[opt.valid_mod[0][1]] # acc embed
-        embed2 = embed[opt.valid_mod[1][1]] # gyro embed
-        features = FeatureConstructor(embed1, embed2, 2)
+        features = torch.stack([acc_embed, gyro_embed, mag_embed], dim=1)
 
         loss = criterion(features)
         losses.update(loss.item(), bsz)
@@ -121,7 +117,7 @@ def train(train_loader, model, criterion, optimizer, epoch, opt):
 
 
 def main():
-    opt = parse_option("save_upper_bound", "fuse_contrastive")
+    opt = parse_option("save_upper_bound", "fuse_contrastive_full")
 
     # build data loader
     train_loader = set_loader(opt)

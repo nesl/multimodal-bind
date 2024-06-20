@@ -121,6 +121,82 @@ class FullIMUEncoder(nn.Module):
 
         return nn.functional.normalize(acc_embed), nn.functional.normalize(gyro_embed), nn.functional.normalize(mag_embed)
     
+class FullIMUEncoder(nn.Module):
+    def __init__(self):
+        super(FullIMUEncoder, self).__init__()
+        self.acc_encoder = SingleIMUEncoder("acc")
+        self.gyro_encoder = SingleIMUEncoder("gyro")
+        self.mag_encoder = SingleIMUEncoder("mag")
+        self.acc_adapter = nn.Sequential(
+            nn.Linear(1920, 1280),
+            nn.BatchNorm1d(1280),
+            nn.ReLU(inplace=True),
+            nn.Linear(1280, 128),
+        )
+
+        self.gyro_adapter = nn.Sequential(
+            nn.Linear(1920, 1280),
+            nn.BatchNorm1d(1280),
+            nn.ReLU(inplace=True),
+            nn.Linear(1280, 128),
+        )
+
+        self.mag_adapter = nn.Sequential(
+            nn.Linear(1920, 1280),
+            nn.BatchNorm1d(1280),
+            nn.ReLU(inplace=True),
+            nn.Linear(1280, 128),
+        )
+
+    def forward(self, batched_data):
+        acc_embed = self.acc_encoder(batched_data)
+        gyro_embed = self.gyro_encoder(batched_data)
+        mag_embed = self.mag_encoder(batched_data)
+
+        batch_size = acc_embed.shape[0]
+        if acc_embed is not None:
+            acc_embed = self.acc_adapter(torch.reshape(acc_embed, (batch_size, -1)))
+            acc_embed = nn.functional.normalize(acc_embed)
+
+        if gyro_embed is not None:
+            gyro_embed = self.gyro_adapter(torch.reshape(gyro_embed, (batch_size, -1)))
+            gyro_embed = nn.functional.normalize(gyro_embed)
+
+        if mag_embed is not None:
+            mag_embed = self.mag_adapter(torch.reshape(mag_embed, (batch_size, -1)))
+            mag_embed = nn.functional.normalize(mag_embed)
+
+        return acc_embed, gyro_embed, mag_embed
+    
+class SupervisedFullIMUEncoder(nn.Module):
+    def __init__(self):
+        super(FullIMUEncoder, self).__init__()
+        self.acc_encoder = SingleIMUEncoder("acc")
+        self.gyro_encoder = SingleIMUEncoder("gyro")
+        self.mag_encoder = SingleIMUEncoder("mag")
+        self.classifier = nn.Sequential(
+
+            nn.Linear(1920 * 3, 1920),
+            nn.BatchNorm1d(1920),
+            nn.ReLU(inplace=True),
+
+            nn.Linear(1920, 128),
+            nn.BatchNorm1d(128),
+            nn.ReLU(inplace=True),
+
+            nn.Linear(128, 7),
+        )
+
+    def forward(self, batched_data):
+        acc_embed = self.acc_encoder(batched_data)
+        gyro_embed = self.gyro_encoder(batched_data)
+        mag_embed = self.mag_encoder(batched_data)
+
+        fused_feature = torch.cat((acc_embed, gyro_embed, mag_embed), dim=1)
+
+        logits = self.classifier(fused_feature)
+
+        return logits
 
 class GyroMagEncoder(nn.Module):
     def __init__(self):
@@ -202,6 +278,24 @@ class ModEncoder(nn.Module):
 
         return nn.functional.normalize(acc_embed), nn.functional.normalize(gyro_embed), nn.functional.normalize(mag_embed)
     
+class SupervisedModEncoder(nn.Module):
+    def __init__(self, mod):
+        super(SupervisedModEncoder, self).__init__()
+        self.encoder = SingleIMUEncoder(mod)
+        self.output_head = nn.Sequential(
+            nn.Linear(1920, 1920),
+            nn.ReLU(),
+            nn.Linear(1920, 7)
+        )
+    def forward(self, data):
+        embed = self.encoder(data)
+        
+        b_size = embed.shape[0]
+        embed = torch.reshape(embed, (b_size, -1))
+
+        return self.output_head(embed)
+
+
 class SupervisedGyroMag(nn.Module):
     def __init__(self):
         super(SupervisedGyroMag, self).__init__()
@@ -269,6 +363,129 @@ class SupervisedAccMag(nn.Module):
         
         combined = torch.cat((mag_embed, acc_embed), dim=-1)
         return self.output_head(combined)
+
+
+class MaskedModEncoder(nn.Module):
+    def __init__(self):
+        super(MaskedModEncoder, self).__init__()
+        self.acc_encoder = SingleIMUEncoder("acc")
+        self.gyro_encoder = SingleIMUEncoder("gyro")
+        self.mag_encoder = SingleIMUEncoder("mag")
+        self.acc_adapter = nn.Sequential(
+            nn.Linear(1920 + 3, 1280),
+            nn.BatchNorm1d(1280),
+            nn.ReLU(inplace=True),
+            nn.Linear(1280, 128),
+        )
+
+        self.gyro_adapter = nn.Sequential(
+            nn.Linear(1920 + 3, 1280),
+            nn.BatchNorm1d(1280),
+            nn.ReLU(inplace=True),
+            nn.Linear(1280, 128),
+        )
+
+        self.mag_adapter = nn.Sequential(
+            nn.Linear(1920 + 3, 1280),
+            nn.BatchNorm1d(1280),
+            nn.ReLU(inplace=True),
+            nn.Linear(1280, 128),
+        )
+
+    def forward(self, batched_data):
+        acc_embed = self.acc_encoder(batched_data)
+        gyro_embed = self.gyro_encoder(batched_data)
+        mag_embed = self.mag_encoder(batched_data)
+
+        mask = batched_data["mask"].cuda() if "mask" in batched_data else None
+
+        batch_size = acc_embed.shape[0]
+        if acc_embed is not None:
+            acc_embed = torch.reshape(acc_embed, (batch_size, -1))
+
+            if mask is not None:
+                acc_embed = torch.cat((acc_embed, mask), dim=1)  # cocnat modality prompt with the embedding
+
+            acc_embed = self.acc_adapter(acc_embed)
+            acc_embed = nn.functional.normalize(acc_embed, dim=1)
+
+        if gyro_embed is not None:
+            gyro_embed = torch.reshape(gyro_embed, (batch_size, -1))
+
+            if mask is not None:
+                gyro_embed = torch.cat((gyro_embed, mask), dim=1)  # cocnat modality prompt with the embedding
+
+            gyro_embed = self.gyro_adapter(gyro_embed)
+            gyro_embed = nn.functional.normalize(gyro_embed, dim=1)
+
+        if mag_embed is not None:
+            mag_embed = torch.reshape(mag_embed, (batch_size, -1))
+
+            if mask is not None:
+                mag_embed = torch.cat((mag_embed, mask), dim=1)  # cocnat modality prompt with the embedding
+
+            mag_embed = self.mag_adapter(mag_embed)
+            mag_embed = nn.functional.normalize(mag_embed, dim=1)
+
+        return acc_embed, gyro_embed, mag_embed
+
+        
+class SupervisedMaskedModEncoder(nn.Module):
+    def __init__(self):
+        super(SupervisedMaskedModEncoder, self).__init__()
+        self.acc_encoder = SingleIMUEncoder("acc")
+        self.gyro_encoder = SingleIMUEncoder("gyro")
+        self.mag_encoder = SingleIMUEncoder("mag")
+        self.acc_adapter = nn.Sequential(
+            nn.Linear(1920 + 3, 1280),
+            nn.BatchNorm1d(1280),
+            nn.ReLU(inplace=True),
+            nn.Linear(1280, 128),
+        )
+
+        # Classify output, fully connected layers
+        self.classifier = nn.Sequential(
+
+            nn.Linear((1920 + 3) * 3, 1280),
+            nn.BatchNorm1d(1280),
+            nn.ReLU(inplace=True),
+
+            nn.Linear(1280, 128),
+            nn.BatchNorm1d(128),
+            nn.ReLU(inplace=True),
+
+            nn.Linear(128, 7),
+        )
+
+    def forward(self, batched_data):
+        acc_embed = self.acc_encoder(batched_data)
+        gyro_embed = self.gyro_encoder(batched_data)
+        mag_embed = self.mag_encoder(batched_data)
+
+        mask = batched_data["mask"].cuda() if "mask" in batched_data else None
+
+        batch_size = acc_embed.shape[0]
+        if acc_embed is not None:
+            acc_embed = torch.reshape(acc_embed, (batch_size, -1))
+            if mask is not None:
+                acc_embed = torch.cat((acc_embed, mask), dim=1)  # cocnat modality prompt with the embedding
+
+        if gyro_embed is not None:
+            gyro_embed = torch.reshape(gyro_embed, (batch_size, -1))
+
+            if mask is not None:
+                gyro_embed = torch.cat((gyro_embed, mask), dim=1)  # cocnat modality prompt with the embedding
+
+        if mag_embed is not None:
+            mag_embed = torch.reshape(mag_embed, (batch_size, -1))
+
+            if mask is not None:
+                mag_embed = torch.cat((mag_embed, mask), dim=1)  # cocnat modality prompt with the embedding
+
+        fused_embed = torch.cat((acc_embed, gyro_embed, mag_embed), dim=1)
+        
+        return self.classifier(fused_embed)
+
 
 if __name__ == '__main__':
 

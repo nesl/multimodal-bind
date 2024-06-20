@@ -4,8 +4,6 @@ import os
 import time
 
 # import tensorboard_logger as tb_logger
-from modules.option_utils import parse_option
-from modules.print_utils import pprint
 from models.imu_models import SingleIMUAutoencoder
 import torch
 import torch.backends.cudnn as cudnn
@@ -20,6 +18,8 @@ from shared_files.util import set_optimizer, save_model
 from shared_files import data_pre as data
 
 from tqdm import tqdm
+from modules.option_utils import parse_option
+from modules.print_utils import pprint
 
 def set_loader(opt):
     mod = opt.common_modality
