@@ -177,6 +177,58 @@ class DualContrastiveIMUEncoder(nn.Module):
 
         return output, norm_mod1_features, norm_mod2_features
 
+class DualMaskedIMUEncoder(nn.Module):
+    def __init__(self, opt):
+        super().__init__()
+
+        print(f"=\tLoading SingleIMUEncoder for mod {opt.mod1}")
+        self.mod1_encoder = SingleIMUEncoder(opt.mod1)
+        print(f"=\tLoading SingleIMUEncoder for mod {opt.mod2}")
+        self.mod2_encoder = SingleIMUEncoder(opt.mod2)
+
+        self.head_1 = nn.Sequential(
+
+            nn.Linear(1920, 1280),
+            nn.BatchNorm1d(1280),
+            nn.ReLU(inplace=True),
+
+            nn.Linear(1280, 128),            
+            )
+
+        self.head_2 = nn.Sequential(
+
+            nn.Linear(1920, 1280),
+            nn.BatchNorm1d(1280),
+            nn.ReLU(inplace=True),
+
+            nn.Linear(1280, 128),            
+            )
+
+        # Classify output, fully connected layers
+        self.classifier = nn.Sequential(
+            nn.Linear(3840 + 2 * 2, 1280),
+            nn.BatchNorm1d(1280),
+            nn.ReLU(inplace=True),
+
+            nn.Linear(1280, 128),
+            nn.BatchNorm1d(128),
+            nn.ReLU(inplace=True),
+
+            nn.Linear(128, opt.num_class),
+        )
+
+    def forward(self, x1, x2, mask):
+        mod1_output = self.mod1_encoder(x1).flatten(start_dim=1)
+        mod2_output = self.mod2_encoder(x2).flatten(start_dim=1)
+
+        mod1_output = torch.cat((mod1_output, mask), dim=1)
+        mod2_output = torch.cat((mod2_output, mask), dim=1)
+
+        fused_features = torch.cat((mod1_output, mod2_output), dim=1)
+        output = self.classifier(fused_features)
+
+        return output
+
 class MaskedModEncoder(nn.Module):
     def __init__(self):
         super(MaskedModEncoder, self).__init__()
@@ -393,6 +445,32 @@ class SupervisedGyroMag(nn.Module):
         combined = torch.cat((gyro_embed, mag_embed), dim=-1)
         return self.output_head(combined)
 
+class UnimodalSupervisedIMUEncoder(nn.Module):
+    def __init__(self, opt):
+        super().__init__()
+
+        print(f"=\tLoading SingleIMUEncoder for mod {opt.common_modality}")
+        self.mod_encoder = SingleIMUEncoder(opt.common_modality)
+
+        self.classifier = nn.Sequential(
+
+            nn.Linear(1920, 1280),
+            nn.BatchNorm1d(1280),
+            nn.ReLU(inplace=True),
+
+            nn.Linear(1280, 128),
+            nn.BatchNorm1d(128),
+            nn.ReLU(inplace=True),
+
+            nn.Linear(128, opt.num_class),
+        )
+
+    def forward(self, x1):
+        mod1_output = self.mod_encoder(x1).flatten(start_dim=1)
+        output = self.classifier(mod1_output)
+
+        return output
+        
 
 if __name__ == "__main__":
 

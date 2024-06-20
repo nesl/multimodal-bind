@@ -74,6 +74,27 @@ class Multimodal_dataset():
 		data['data_path'] = self.file_names[idx]
 		return data
 
+class Unimodal_dataset_direct_load():
+	"""Build dataset from motion sensor data."""
+	def __init__(self, x, y):
+
+		self.data = x.tolist() #concate and tolist
+		self.labels = y.tolist() #tolist
+
+		self.data = torch.tensor(self.data) # to tensor
+		self.labels = torch.tensor(self.labels)
+		self.labels = (self.labels).long()
+
+
+	def __len__(self):
+		return len(self.labels)
+
+	def __getitem__(self, idx):
+
+		sensor_data = self.data[idx]
+		activity_label = self.labels[idx]
+
+		return sensor_data, activity_label
 
 class Multimodal_dataset_direct_load():
 	"""Build dataset from motion sensor data."""

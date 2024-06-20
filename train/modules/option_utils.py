@@ -102,7 +102,7 @@ def parse_option(exp_type, exp_tag):
     opt.valid_mods = ['acc', 'gyro'] if opt.dataset == 'train_A' else ['acc', 'mag']
 
     # set the path according to the environment
-    if "label" in exp_type:
+    if "mmbind_label" in exp_type:
         opt.save_path = f'./{exp_type}/save_{opt.dataset}_{exp_tag}_{opt.load_pretrain}_{opt.common_modality}_{opt.seed}_{opt.dataset_split}_usepair_{opt.use_pair}/'
     elif "save_mmbind" in exp_type and ("unimod_autoencoder" in exp_tag or "contrastive" in exp_tag):
         opt.save_path = f'./{exp_type}/save_{opt.dataset}_{exp_tag}_{opt.load_pretrain}_{opt.common_modality}_{opt.seed}_{opt.dataset_split}/'

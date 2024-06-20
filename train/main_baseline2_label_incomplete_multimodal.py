@@ -1,8 +1,10 @@
 import os
+import sys
 import time
 
 import torch
 import torch.backends.cudnn as cudnn
+import torch.optim as optim
 
 
 import numpy as np
@@ -13,12 +15,11 @@ from shared_files.util import adjust_learning_rate, accuracy
 from shared_files.util import set_optimizer, save_model
 from shared_files import data_pre as data
 
+from tqdm import tqdm
 from modules.option_utils import parse_option
 from modules.print_utils import pprint
 
-from tqdm import tqdm
 from models.imu_models import DualContrastiveIMUEncoder
-from shared_files.contrastive_design import ConFusionLoss
 
 def load_single_modal_set_masked(opt, mod, root):
 
@@ -95,38 +96,12 @@ def load_dataset_masked(opt):
     mask = np.vstack((mask_A, mask_B))
     
     return x1, x2, y, mask
-    
+
 def set_loader(opt):
-
-    #load labeled train and test data
-    print(f"=\tInitializing Dataloader")
-
-
-    if opt.use_pair:
-        folder_path = f"./save_mmbind_more_label_paired_data_{opt.common_modality}_{opt.seed}_{opt.dataset_split}/"
-    else:
-        folder_path = f"./save_mmbind_label_paired_data_{opt.common_modality}_{opt.seed}_{opt.dataset_split}/"
-    
-    print(f"=\tLoading data from path {folder_path}")
-
-    x1_paired = np.load(folder_path + f"{opt.mod1}.npy")
-    x2_paired = np.load(folder_path + f"{opt.mod2}.npy")
-    y_paired = np.load(folder_path + f"label.npy")
-    
-    original_x_train_1, original_x_train_2, original_y_train, original_mask_vector = load_dataset_masked(opt)
-    x_train_1 = np.vstack((original_x_train_1, x1_paired))
-    x_train_2 = np.vstack((original_x_train_2, x2_paired))
-    y_train = np.hstack((original_y_train, y_paired))
-    
-    
-    paired_mask_vector = np.zeros((x1_paired.shape[0], 1))
-
-    mask_vector = np.vstack((paired_mask_vector, paired_mask_vector)) # mask vector is irrelevant anyway
-
+    x_train_1, x_train_2, y_train, mask_train = load_dataset_masked(opt)
     x_test_1, x_test_2, y_test, mask_test = load_test_dataset_masked(opt, "test")
 
-
-    train_dataset = data.Multimodal_incomplete_dataset_direct_load(x_train_1, x_train_2, y_train, mask_vector)
+    train_dataset = data.Multimodal_incomplete_dataset_direct_load(x_train_1, x_train_2, y_train, mask_train)
     test_dataset = data.Multimodal_incomplete_dataset_direct_load(x_test_1, x_test_2,  y_test, mask_test)
 
     train_loader = torch.utils.data.DataLoader(
@@ -141,22 +116,21 @@ def set_loader(opt):
 
 
 def set_model(opt):
+    # Get two class model
     model = DualContrastiveIMUEncoder(opt)
-
-    criterion1 = torch.nn.CrossEntropyLoss()
-    criterion2 = ConFusionLoss(temperature=opt.temp)
+    criterion = torch.nn.CrossEntropyLoss()
 
     if torch.cuda.is_available():
+        if torch.cuda.device_count() > 1:
+            model = torch.nn.DataParallel(model)
         model = model.cuda()
-        criterion1 = criterion1.cuda()
-        criterion2 = criterion2.cuda()
+        criterion = criterion.cuda()
         cudnn.benchmark = True
-        
-    return model, criterion1, criterion2
+
+    return model, criterion
 
 
-
-def train(train_loader, model, criterion1, criterion2, optimizer, epoch, opt):
+def train(train_loader, model, criterion, optimizer, epoch, opt):
     """one epoch training"""
     model.train()
 
@@ -167,6 +141,8 @@ def train(train_loader, model, criterion1, criterion2, optimizer, epoch, opt):
 
     end = time.time()
 
+    label_list = []
+    pred1_list = []
 
     for idx, (input_data1, input_data2, labels, mask) in enumerate(train_loader):
         data_time.update(time.time() - end)
@@ -175,19 +151,27 @@ def train(train_loader, model, criterion1, criterion2, optimizer, epoch, opt):
             input_data1 = input_data1.cuda()
             input_data2 = input_data2.cuda()
             labels = labels.cuda()
-        bsz = labels.shape[0]
+            mask = mask.cuda()
+        bsz = input_data1.shape[0]
 
-        output, feature1, feature2 = model(input_data1, input_data2)
+        # warm-up learning rate
+        # warmup_learning_rate(opt, epoch, idx, len(train_loader), optimizer)
 
-        features = torch.stack([feature1, feature2], dim=1)
+        output, _, _ = model(input_data1, input_data2)
 
-        loss1 = criterion1(output, labels)
-        loss2 = criterion2(features)
-        loss = loss1 + loss2
+
+        label_list.extend(labels.cpu().numpy())
+        pred1_list.extend(output.max(1)[1].cpu().numpy())
+        
+        loss = criterion(output, labels)
+
+
+        # acc, rec, prec, target_positive, pred_positive = rate_eval(output, labels, opt.num_class, topk=(1, 5))
+        acc, _ = accuracy(output, labels, topk=(1, 5))
+        # print("Compare acc, rec:", acc, rec)
 
         # update metric
         losses.update(loss.item(), bsz)
-        acc, _ = accuracy(output, labels, topk=(1, 5))
         top1.update(acc[0], bsz)
 
         # SGD
@@ -211,6 +195,7 @@ def validate(val_loader, model, criterion, opt):
     top1 = AverageMeter()
 
     confusion = np.zeros((opt.num_class, opt.num_class))
+
     label_list = []
     pred_list = []
 
@@ -219,24 +204,20 @@ def validate(val_loader, model, criterion, opt):
         for idx, (input_data1, input_data2, labels, mask) in enumerate(val_loader):
 
             if torch.cuda.is_available():
-                input_data1 = input_data1.float().cuda()
-                input_data2 = input_data2.float().cuda()
+                input_data1 = input_data1.cuda()
+                input_data2 = input_data2.cuda()
                 labels = labels.cuda()
+                mask = mask.cuda()
             bsz = labels.shape[0]
 
             # forward
-            output, feature1, feature2 = model(input_data1, input_data2)
+            output, _, _ = model(input_data1, input_data2)
 
-            loss = criterion(output, labels)
-
-            # update metric
-            losses.update(loss.item(), bsz)
-            acc, _ = accuracy(output, labels, topk=(1, 5))
-            top1.update(acc[0], bsz)
-
-            # calculate and store confusion matrix
             label_list.extend(labels.cpu().numpy())
             pred_list.extend(output.max(1)[1].cpu().numpy())
+
+
+            loss = criterion(output, labels)
 
             rows = labels.cpu().numpy()
             cols = output.max(1)[1].cpu().numpy()
@@ -245,13 +226,16 @@ def validate(val_loader, model, criterion, opt):
                 confusion[rows[label_index], cols[label_index]] += 1
 
             # update metric
-            losses.update(loss.item(), bsz)
             acc, _ = accuracy(output, labels, topk=(1, 5))
+            # print("Compare acc, rec:", acc, rec)
+
+            losses.update(loss.item(), bsz)
             top1.update(acc[0], bsz)
 
             # measure elapsed time
             batch_time.update(time.time() - end)
             end = time.time()
+
 
     F1score_test = f1_score(label_list, pred_list, average="macro") # macro sees all class with the same importance
 
@@ -262,29 +246,24 @@ def validate(val_loader, model, criterion, opt):
 
 
 def main():
-
-    opt = parse_option("save_mmbind_label", "incomplete_contrastive_supervise")
+    opt = parse_option("save_baseline2_label", "incomplete_multimodal")
     common_modality = opt.common_modality
     other_modalities = [m for m in ['acc', 'gyro', 'mag'] if m != common_modality]
     opt.mod1 = other_modalities[0]
     opt.mod2 = other_modalities[1]
 
     pprint(f"Common modality: {opt.common_modality}")
-    pprint(f"Mod1: {opt.mod1}")
-    pprint(f"Mod2: {opt.mod2}")
-
     print(f"=\tCommon modality: {opt.common_modality}")
-    print(f"=\tMod1: {opt.mod1}")
-    print(f"=\tMod2: {opt.mod2}")
+
 
     best_acc = 0
     best_f1 = 0
 
     # build data loader
-    train_loader, test_loader = set_loader(opt)
+    train_loader, val_loader = set_loader(opt)
 
     # build model and criterion
-    model, criterion1, criterion2 = set_model(opt)
+    model, criterion = set_model(opt)
 
     # build optimizer
     optimizer = set_optimizer(opt, model)
@@ -292,20 +271,22 @@ def main():
     # tensorboard
     # logger = tb_logger.Logger(logdir=opt.tb_folder, flush_secs=2)
 
+    record_loss = np.zeros(opt.epochs)
     record_acc = np.zeros(opt.epochs)
     record_f1 = np.zeros(opt.epochs)
-    record_loss = np.zeros(opt.epochs)
     record_acc_train = np.zeros(opt.epochs)
 
     pprint(f"Start Training")
     for epoch in tqdm(range(1, opt.epochs + 1), desc=f'Epoch: ', unit='items', ncols=80, colour='green', bar_format='{l_bar}{bar}| {n_fmt}/{total_fmt}[{elapsed}<{remaining}]'):
         adjust_learning_rate(opt, optimizer, epoch)
 
-        # train for one epoch
-        loss, train_acc = train(train_loader, model, criterion1, criterion2, optimizer, epoch, opt)
+        loss, train_acc = train(train_loader, model, criterion, optimizer, epoch, opt)
 
-        # eval for one epoch
-        val_loss, val_acc, confusion, val_F1score, label_list, pred_list = validate(test_loader, model, criterion1, opt)
+
+        # evaluation
+        val_loss, val_acc, confusion, val_F1score, label_list, pred_list = validate(val_loader, model, criterion, opt)
+
+
         if val_acc > best_acc:
             best_acc = val_acc
             best_f1 = val_F1score
@@ -314,6 +295,7 @@ def main():
         record_acc[epoch-1] = val_acc
         record_f1[epoch-1] = val_F1score
         record_acc_train[epoch-1] = train_acc
+
 
         label_list = np.array(label_list)
         pred_list = np.array(pred_list)
@@ -324,8 +306,8 @@ def main():
         np.savetxt(opt.result_path + "test_accuracy.txt", record_acc)
         np.savetxt(opt.result_path + "test_f1.txt", record_f1)
         np.savetxt(opt.result_path + "train_accuracy.txt", record_acc_train)
+    
 
-    # save the last model
     save_file = os.path.join(opt.save_folder, 'last.pth')
     save_model(model, optimizer, opt, opt.epochs, save_file)
 
@@ -339,6 +321,8 @@ def main():
     pprint('best f1: {:.3f}'.format(best_f1))
     pprint('last accuracy: {:.3f}'.format(val_acc))
     pprint('final F1:{:.3f}'.format(val_F1score))
+
+
 
 
 if __name__ == '__main__':
