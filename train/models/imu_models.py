@@ -470,7 +470,42 @@ class UnimodalSupervisedIMUEncoder(nn.Module):
         output = self.classifier(mod1_output)
 
         return output
+
+class DualSupervisedIMUEncoder(nn.Module):
+    """Model for human-activity-recognition."""
+    def __init__(self, opt):
+        super().__init__()
+
+        print(f"=\tLoading SingleIMUEncoder for mod {opt.mod1}")
+        self.mod1_encoder = SingleIMUEncoder(opt.mod1)
+        print(f"=\tLoading SingleIMUEncoder for mod {opt.mod2}")
+        self.mod2_encoder = SingleIMUEncoder(opt.mod2)
+
+
+        # Classify output, fully connected layers
+        # Classify output, fully connected layers
+        self.classifier = nn.Sequential(
+            nn.Linear(3840, 1280),
+            nn.BatchNorm1d(1280),
+            nn.ReLU(inplace=True),
+
+            nn.Linear(1280, 128),
+            nn.BatchNorm1d(128),
+            nn.ReLU(inplace=True),
+
+            nn.Linear(128, opt.num_class),
+        )
+
+    def forward(self, x1, x2):
+
+        mod1_output = self.mod1_encoder(x1).flatten(start_dim=1)
+        mod2_output = self.mod2_encoder(x2).flatten(start_dim=1)
         
+        fused_features = torch.cat((mod1_output, mod2_output), dim=1)
+        
+        output = self.classifier(fused_features)
+
+        return output
 
 if __name__ == "__main__":
 
