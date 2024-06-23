@@ -66,7 +66,7 @@ main_mmbind_1_more_label_pair + mmbind_contarstive_supervise has the best perfor
 
 #evaluate (funetune an multimodal model with train_C)
 - **Lower_bound**: multimodal supervised learning with train_C
-- **Baseline 1**: Unimodal supervised learning 
+- **Baseline 1**: Multimodal supervised learning 
 - **Baseline 2**: Incomplete multimodal supervised learning, no contrastive as no paired data
 - **Baseline 3**: Incomplete multimodal supervised learning + prompt
 - **Upper Bound** (all natually paired data from train_A+train_B+train_C): 
