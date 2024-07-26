@@ -30,7 +30,7 @@ multimodal-bind
     └── ...
 ```
 
-`processed_data` and `processed_data_all` are also available at 
+`processed_data` and `processed_data_all` are also available at **[gdrive/PAMAP2](https://drive.google.com/drive/folders/1TMzQ_UOraKF3TYy4bYnTY2xgOqjvPr_E?usp=share_link)**
 
 
 ## Usage
