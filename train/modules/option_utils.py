@@ -69,6 +69,10 @@ def parse_option(exp_type, exp_tag):
 
     parser.add_argument('--use_pair', type=bool, default=False)
 
+    parser.add_argument("--pairing", type=bool, default=False)
+
+    parser.add_argument("--load_pretrain", type=str, default="no_load")
+
     opt = parser.parse_args()
 
     print()
@@ -84,8 +88,7 @@ def parse_option(exp_type, exp_tag):
         raise ValueError(f"{opt.processed_data_path} not found")
 
     # Set load pretrain tag
-    opt.load_pretrain = "no_load"
-    if ("fuse" in exp_type and "mmbind" not in exp_type) or "fuse" in exp_tag:
+    if ("fuse" in exp_type and "mmbind" not in exp_type) or "fuse" in exp_tag or opt.load_pretrain == "load_pretrain":
         print(f"=\tLoading pretrain for {exp_tag}_{exp_tag}")
         opt.load_pretrain = "load_pretrain"
     
@@ -102,7 +105,9 @@ def parse_option(exp_type, exp_tag):
     opt.valid_mods = ['acc', 'gyro'] if opt.dataset == 'train_A' else ['acc', 'mag']
 
     # set the path according to the environment
-    if "mmbind_label" in exp_type:
+    if "label" in exp_type and opt.pairing:
+        opt.save_path = f'./{exp_type}/save_{opt.dataset}_{exp_tag}_{opt.load_pretrain}_{opt.common_modality}_{opt.seed}_{opt.dataset_split}_usepair_{opt.use_pair}_data_pairing/'
+    elif "mmbind_label" in exp_type:
         opt.save_path = f'./{exp_type}/save_{opt.dataset}_{exp_tag}_{opt.load_pretrain}_{opt.common_modality}_{opt.seed}_{opt.dataset_split}_usepair_{opt.use_pair}/'
     elif "save_mmbind" in exp_type and ("unimod_autoencoder" in exp_tag or "contrastive" in exp_tag):
         opt.save_path = f'./{exp_type}/save_{opt.dataset}_{exp_tag}_{opt.load_pretrain}_{opt.common_modality}_{opt.seed}_{opt.dataset_split}/'

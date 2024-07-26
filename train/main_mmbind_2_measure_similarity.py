@@ -239,7 +239,7 @@ def main():
         os.makedirs(save_paired_path)
 
     similarity_matrix = cosine_similarity(reference_feature, search_feature)
-    print(similarity_matrix)
+    # print(similarity_matrix)
 
     plt.imshow(similarity_matrix, cmap='viridis', interpolation='nearest')
     plt.colorbar()
@@ -259,7 +259,8 @@ def main():
     select_label = np.zeros(paired_data_length)
     correct_map = 0
     
-    similarity_record = np.zeros(paired_data_length)
+    # similarity_record = np.zeros(paired_data_length)
+    similarity_record = {}
 
     file_counter = 0
     label_mapper = [1, 3, 4, 12, 13, 16, 17]
@@ -269,7 +270,10 @@ def main():
 
         select_feature_index = np.argmax(temp_similarity_vector)
         select_label[sample_index] = search_label[select_feature_index]
-        similarity_record[sample_index] = np.max(temp_similarity_vector)
+
+        similairty_key = str(label_mapper[reference_label[sample_index]]) + f'_{opt.reference_modality}_' + str(file_counter)
+        similarity_record[similairty_key] = np.max(temp_similarity_vector)
+        # similarity_record[sample_index] = np.max(temp_similarity_vector)
 
         if reference_label[sample_index] == search_label[select_feature_index]:
             correct_map += 1
@@ -277,8 +281,7 @@ def main():
         else:
             temp_correct = 0
 
-
-        print(reference_label[sample_index], search_label[select_feature_index], select_feature_index, np.max(temp_similarity_vector), temp_correct)
+        # print(reference_label[sample_index], search_label[select_feature_index], select_feature_index, np.max(temp_similarity_vector), temp_correct)
 
         index = {
             "acc": 4,
@@ -296,11 +299,11 @@ def main():
 
         file_counter += 1
 
-    # np.save(save_paired_path + 'similarity.npy', similarity_record)
+    np.save(save_paired_path + f'similarity_{opt.reference_modality}.npy', similarity_record)
     # np.save(save_paired_path + 'label.npy', reference_label)
 
-    print(similarity_record)
-    print(correct_map, correct_map/paired_data_length)
+    # print(similarity_record)
+    # print(correct_map, correct_map/paired_data_length)
 
     disp = ConfusionMatrixDisplay.from_predictions(reference_label, select_label)
     disp.plot() 

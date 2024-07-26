@@ -72,6 +72,7 @@ def set_model(opt):
     model.gyro_encoder = model_template.gyro_encoder
     model.mag_encoder = model_template.mag_encoder
     model.acc_encoder = model_template.acc_encoder
+
     criterion = torch.nn.CrossEntropyLoss()
 
     # enable synchronized Batch Normalization

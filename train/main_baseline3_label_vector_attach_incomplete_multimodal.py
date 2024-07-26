@@ -112,7 +112,11 @@ def load_dataset_masked(opt):
     return x1, x2, y, mask
 
 def set_loader(opt):
-    x_train_1, x_train_2, y_train, mask_train = load_dataset_masked(opt)
+    if opt.pairing:
+        x_train_1, x_train_2, y_train, mask_train = load_test_dataset_masked(opt, "train_C")
+    else:
+        x_train_1, x_train_2, y_train, mask_train = load_dataset_masked(opt)
+
     x_test_1, x_test_2, y_test, mask_test = load_test_dataset_masked(opt, "test")
 
     train_dataset = data.Multimodal_incomplete_dataset_direct_load(x_train_1, x_train_2, y_train, mask_train)
@@ -131,6 +135,11 @@ def set_model(opt):
 
     model = DualMaskedIMUEncoder(opt)
     criterion = torch.nn.CrossEntropyLoss()
+
+    if opt.pairing:
+        weight = f"./save_baseline3_label/save_train_AB_vector_attach_incomplete_multimodal_no_load_{opt.common_modality}_{opt.seed}_{opt.dataset_split}/models/lr_0.0001_decay_0.0001_bsz_64/last.pth"
+        print(f"=\tLoading model pretrain weights from {weight}")
+        model.load_state_dict(torch.load(weight)['model'])
 
     if torch.cuda.is_available():
         model = model.cuda()

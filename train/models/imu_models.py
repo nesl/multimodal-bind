@@ -481,9 +481,6 @@ class DualSupervisedIMUEncoder(nn.Module):
         print(f"=\tLoading SingleIMUEncoder for mod {opt.mod2}")
         self.mod2_encoder = SingleIMUEncoder(opt.mod2)
 
-
-        # Classify output, fully connected layers
-        # Classify output, fully connected layers
         self.classifier = nn.Sequential(
             nn.Linear(3840, 1280),
             nn.BatchNorm1d(1280),

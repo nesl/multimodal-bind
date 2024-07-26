@@ -9,35 +9,33 @@ class SingleIMUEncoder(nn.Module):
             nn.BatchNorm2d(64),
             nn.ReLU(inplace=True),
             nn.Dropout(),
-
             # nn.Conv2d(64, 64, 2),
             # nn.BatchNorm2d(64),
             # nn.ReLU(inplace=True),
             # nn.Dropout(),
-
             nn.Conv2d(64, 32, 1),
             nn.BatchNorm2d(32),
             nn.ReLU(inplace=True),
             nn.Dropout(),
-
             nn.Conv2d(32, 16, 1),
             nn.BatchNorm2d(16),
             nn.ReLU(inplace=True),
-
         )
-
 
         self.modality = modality
         self.GRU = nn.GRU(1998, hidden_size=120, num_layers=2, batch_first=True)
 
     def forward(self, data):
+        if isinstance(data, dict):
+            if self.modality not in data:
+                return None
+            data = data[self.modality].cuda()
         self.GRU.flatten_parameters()
-        acc_data = data[self.modality].cuda()
-        batch_size = acc_data.shape[0]
-        acc_data = torch.unsqueeze(acc_data, dim=1) # Add 1 channel
-        embedding = torch.reshape(self.conv_layers(acc_data), (batch_size, 16, -1))
+        batch_size = data.shape[0]
+        data = torch.unsqueeze(data, dim=1)  # Add 1 channel
+        embedding = torch.reshape(self.conv_layers(data), (batch_size, 16, -1))
         embedding = self.GRU(embedding)[0]
-        return embedding # batch_size x 16 * 120
+        return embedding  # batch_size x 16 * 120
     
 class SingleIMUDecoder(nn.Module):
     def __init__(self):
@@ -309,7 +307,6 @@ class SupervisedGyroMag(nn.Module):
     def forward(self, data):
         
         gyro_embed = self.gyro_encoder(data)
-        
         b_size = gyro_embed.shape[0]
         gyro_embed = torch.reshape(gyro_embed, (b_size, -1))
         mag_embed = self.mag_encoder(data)
@@ -362,6 +359,32 @@ class SupervisedAccMag(nn.Module):
         acc_embed = torch.reshape(acc_embed, (b_size, -1))
         
         combined = torch.cat((mag_embed, acc_embed), dim=-1)
+        return self.output_head(combined)
+
+class SupervisedIMU(nn.Module):
+    def __init__(self):
+        super(SupervisedIMU, self).__init__()
+        self.acc_encoder = SingleIMUEncoder('acc')
+        self.gyro_encoder = SingleIMUEncoder('gyro')
+        self.mag_encoder = SingleIMUEncoder('mag')
+        self.output_head = nn.Sequential(
+            nn.Linear(1920 * 3, 1920),
+            nn.ReLU(),
+            nn.Linear(1920, 7)
+        )
+    def forward(self, data):
+        
+        acc_embed = self.acc_encoder(data)
+        gyro_embed = self.gyro_encoder(data)
+        mag_embed = self.mag_encoder(data)
+        
+        b_size = mag_embed.shape[0]
+        
+        acc_embed = torch.reshape(acc_embed, (b_size, -1))
+        gyro_embed = torch.reshape(gyro_embed, (b_size, -1))
+        mag_embed = torch.reshape(mag_embed, (b_size, -1))
+        
+        combined = torch.cat((acc_embed, gyro_embed, mag_embed), dim=-1)
         return self.output_head(combined)
 
 
@@ -487,6 +510,39 @@ class SupervisedMaskedModEncoder(nn.Module):
         return self.classifier(fused_embed)
 
 
+class DualSupervisedIMUEncoder(nn.Module):
+    """Model for human-activity-recognition."""
+    def __init__(self, opt):
+        super().__init__()
+
+        print(f"=\tLoading SingleIMUEncoder for mod {opt.mod1}")
+        self.mod1_encoder = SingleIMUEncoder(opt.mod1)
+        print(f"=\tLoading SingleIMUEncoder for mod {opt.mod2}")
+        self.mod2_encoder = SingleIMUEncoder(opt.mod2)
+
+        self.classifier = nn.Sequential(
+            nn.Linear(3840, 1280),
+            nn.BatchNorm1d(1280),
+            nn.ReLU(inplace=True),
+
+            nn.Linear(1280, 128),
+            nn.BatchNorm1d(128),
+            nn.ReLU(inplace=True),
+
+            nn.Linear(128, opt.num_class),
+        )
+
+    def forward(self, x1, x2):
+
+        mod1_output = self.mod1_encoder(x1).flatten(start_dim=1)
+        mod2_output = self.mod2_encoder(x2).flatten(start_dim=1)
+        
+        fused_features = torch.cat((mod1_output, mod2_output), dim=1)
+        
+        output = self.classifier(fused_features)
+
+        return output
+    
 if __name__ == '__main__':
 
     model = SingleIMUDecoder()

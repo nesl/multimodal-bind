@@ -54,21 +54,25 @@ def set_loader(opt):
     #load labeled train and test data
     print(f"=\tInitializing Dataloader")
 
-
-    if opt.use_pair:
-        folder_path = f"./save_mmbind_more_label_paired_data_{opt.common_modality}_{opt.seed}_{opt.dataset_split}/"
+    if opt.pairing:
+        x_train_1, x_train_2, y_train = load_test_dataset(opt, "train_C")
+        train_dataset = data.Multimodal_dataset_direct_load(x_train_1, x_train_2, y_train)
     else:
-        folder_path = f"./save_mmbind_label_paired_data_{opt.common_modality}_{opt.seed}_{opt.dataset_split}/"
-    
-    print(f"=\tLoading data from path {folder_path}")
+        if opt.use_pair:
+            folder_path = f"./save_mmbind_more_label_paired_data_{opt.common_modality}_{opt.seed}_{opt.dataset_split}/"
+        else:
+            folder_path = f"./save_mmbind_label_paired_data_{opt.common_modality}_{opt.seed}_{opt.dataset_split}/"
+        
+        print(f"=\tLoading data from path {folder_path}")
 
-    x1_paired = np.load(folder_path + f"{opt.mod1}.npy")
-    x2_paired = np.load(folder_path + f"{opt.mod2}.npy")
-    y_paired = np.load(folder_path + f"label.npy")
+        x1_paired = np.load(folder_path + f"{opt.mod1}.npy")
+        x2_paired = np.load(folder_path + f"{opt.mod2}.npy")
+        y_paired = np.load(folder_path + f"label.npy")
+
+
+        train_dataset = data.Multimodal_dataset_direct_load(x1_paired, x2_paired, y_paired)
 
     x_test_1, x_test_2, y_test = load_test_dataset(opt, "test")
-
-    train_dataset = data.Multimodal_dataset_direct_load(x1_paired, x2_paired, y_paired)
     test_dataset = data.Multimodal_dataset_direct_load(x_test_1, x_test_2, y_test)
 
     train_loader = torch.utils.data.DataLoader(
@@ -86,6 +90,10 @@ def set_model(opt):
 
     # model = DualContrastiveIMUEncoder(input_size=1, num_classes=opt.num_class)
     model = DualContrastiveIMUEncoder(opt)
+    if opt.pairing:
+        weight = f"./save_mmbind_label/save_train_AB_contrastive_supervise_no_load_{opt.common_modality}_{opt.seed}_{opt.dataset_split}_usepair_{opt.use_pair}/models/lr_1e-5_decay_0.0001_bsz_64/last.pth"
+        print(f"=\tLoading model pretrain weights from {weight}")
+        model.load_state_dict(torch.load(weight)['model'])
 
     criterion1 = torch.nn.CrossEntropyLoss()
     criterion2 = ConFusionLoss(temperature=opt.temp)
@@ -112,7 +120,7 @@ def train(train_loader, model, criterion1, criterion2, optimizer, epoch, opt):
     end = time.time()
 
 
-    for idx, (input_data1, input_data2, labels) in enumerate(train_loader):
+    for idx, ((input_data1, input_data2), labels) in enumerate(train_loader):
         data_time.update(time.time() - end)
 
         if torch.cuda.is_available():
@@ -160,7 +168,7 @@ def validate(val_loader, model, criterion, opt):
 
     with torch.no_grad():
         end = time.time()
-        for idx, (input_data1, input_data2, labels) in enumerate(val_loader):
+        for idx, ((input_data1, input_data2), labels) in enumerate(val_loader):
 
             if torch.cuda.is_available():
                 input_data1 = input_data1.float().cuda()

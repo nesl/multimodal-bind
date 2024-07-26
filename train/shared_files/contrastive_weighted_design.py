@@ -22,7 +22,6 @@ def FeatureConstructor(f1, f2, num_positive):
 
 
 ## contrastive loss with supervised format
-
 class ConFusionLoss(nn.Module):
     """Supervised Contrastive Learning: https://arxiv.org/pdf/2004.11362.pdf.
     It also supports the unsupervised contrastive loss in SimCLR"""
@@ -56,9 +55,8 @@ class ConFusionLoss(nn.Module):
         if len(features.shape) > 3:
             features = features.view(features.shape[0], features.shape[1], -1)
 
-        # print(features.shape)
         batch_size = features.shape[0]
-
+       
         mask = torch.eye(batch_size, dtype=torch.float32).to(device)
 
         contrast_count = features.shape[1]
@@ -74,18 +72,6 @@ class ConFusionLoss(nn.Module):
         similarity_matrix = torch.div(
             torch.matmul(anchor_feature, contrast_feature.T),
             self.temperature)
-
-        # print(similarity_matrix[0], similarity_matrix.shape)
-        # print(similarity, similarity.shape)
-
-        for sample_id in range(batch_size):
-            similarity_matrix[sample_id, sample_id] *= similarity[sample_id]
-            similarity_matrix[sample_id+batch_size, sample_id] *= similarity[sample_id]
-            similarity_matrix[sample_id, sample_id+batch_size] *= similarity[sample_id]
-            similarity_matrix[sample_id+batch_size, sample_id+batch_size] *= similarity[sample_id]
-
-        # print(similarity_matrix[0], similarity_matrix.shape)
-
 
         # for numerical stability
         # similarity_matrix = F.normalize(similarity_matrix, p=2, dim = 1)
@@ -105,22 +91,21 @@ class ConFusionLoss(nn.Module):
 
         mask = mask * logits_mask#positive samples except itself
 
-        # print(mask[0].shape, logits_mask[0])
-
         # compute log_prob
         exp_logits = torch.exp(similarity_matrix) * logits_mask #exp(z_i * z_a / T)
         # all_log_prob = torch.log(exp_logits.sum(1))# log(sum(exp(z_i * z_a / T))), need change to I\{i} later
 
         # SupCon out
-        log_prob = similarity_matrix - torch.log(exp_logits.sum(1, keepdim=True))
+        log_prob = similarity_matrix - torch.log(exp_logits.sum(1, keepdim=True)) # 3b_size x 3bsize
         mean_log_prob_pos = (mask * log_prob).sum(1) / mask.sum(1)#sup_out
 
         # SupCon in
         # log_prob =  torch.exp(similarity_matrix) / exp_logits.sum(1, keepdim=True)
         # mean_log_prob_pos = torch.log((mask * log_prob).sum(1) / mask.sum(1))
 
+       
         # loss
-        loss = - (self.temperature / self.base_temperature) * mean_log_prob_pos
+        loss = - (self.temperature / self.base_temperature) * mean_log_prob_pos * similarity.repeat(3)
         # print("loss:",loss)
 
         loss = loss.view(anchor_count, batch_size).mean()

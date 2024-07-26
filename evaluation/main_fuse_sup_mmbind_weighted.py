@@ -1,111 +1,38 @@
+from __future__ import print_function
+
 import os
 import sys
+import argparse
 import time
+import math
 
+# import tensorboard_logger as tb_logger
 import torch
 import torch.backends.cudnn as cudnn
 import torch.optim as optim
+# from torchvision import transforms, datasets
 
 
 import numpy as np
+from sklearn.model_selection import train_test_split
 from sklearn.metrics import f1_score
 
 from shared_files.util import AverageMeter
-from shared_files.util import adjust_learning_rate, accuracy
+from shared_files.util import adjust_learning_rate, warmup_learning_rate, accuracy
 from shared_files.util import set_optimizer, save_model
 from shared_files import data_pre as data
 
+from models.imu_models import GyroMagEncoder, SupervisedAccGyro, SupervisedAccMag, SupervisedGyroMag, ModEncoder
+
 from tqdm import tqdm
-from modules.option_utils import parse_option
+from modules.option_utils import parse_evaluation_option
 from modules.print_utils import pprint
 
-from models.imu_models import DualContrastiveIMUEncoder
-
-def load_single_modal_set_masked(opt, mod, root):
-
-    print(f"=\tLoading masked data {mod} from {root}")
-    train_dataset = data.Multimodal_masked_dataset([], [mod], root=root, opt=opt)
-    train_loader = torch.utils.data.DataLoader(
-        train_dataset, batch_size=opt.batch_size,
-        num_workers=opt.num_workers, pin_memory=True, shuffle=True)
-    
-    mod1_data = []
-    mod2_data = []
-    y = []
-    masks = []
-
-    for _, batch in enumerate(train_loader):
-        mod1_x = batch[opt.mod1]
-        mod2_x = batch[opt.mod2]
-        mask = batch['mask']
-        labels = batch['action']
-
-        mod1_data.append(mod1_x)
-        mod2_data.append(mod2_x)
-        y.append(labels)
-        masks.append(mask)
-    
-    # [nb] -> [nb * b]
-    mod1_data = torch.concatenate(mod1_data, dim=0)
-    mod2_data = torch.concatenate(mod2_data, dim=0)
-    y = torch.concatenate(y, dim=0)
-    masks = torch.concatenate(masks, dim=0)
-    print(f"=\tSingle modal set ({root}) size: {mod1_data.shape}")
-
-    return mod1_data, mod2_data, y, masks
-
-def load_test_dataset_masked(opt, root):
-
-    print(f"=\tLoading data {opt.mod1} and {opt.mod2} from {root}")
-    test_dataset = data.Multimodal_masked_dataset([], [opt.mod1, opt.mod2], root=root, opt=opt)
-
-    test_loader = torch.utils.data.DataLoader(
-        test_dataset, batch_size=opt.batch_size,
-        num_workers=opt.num_workers, pin_memory=True, shuffle=True)
-    
-    x1 = []
-    x2 = []
-    y = []
-    masks = []
-    for _, batch in enumerate(test_loader):
-        mod1_data = batch[opt.mod1]
-        mod2_data = batch[opt.mod2]
-        labels = batch['action']
-
-        x1.append(mod1_data)
-        x2.append(mod2_data)
-        y.append(labels)
-        masks.append(batch['mask'])
-    
-    # [nb] -> [nb * b]
-    x1 = torch.concatenate(x1, dim=0)
-    x2 = torch.concatenate(x2, dim=0)
-    y = torch.concatenate(y, dim=0)
-    masks = torch.concatenate(masks, dim=0)
-
-    return x1, x2, y, masks
-
-def load_dataset_masked(opt):
-    x1_A, x2_A, y_A, mask_A = load_single_modal_set_masked(opt, opt.mod1, "train_A")
-    x1_B, x2_B, y_B, mask_B = load_single_modal_set_masked(opt, opt.mod2, "train_B")
-    
-    x1 = np.vstack((x1_A, x1_B))
-    x2 = np.vstack((x2_A, x2_B))
-
-    y = np.hstack((y_A, y_B))
-    mask = np.vstack((mask_A, mask_B))
-    
-    return x1, x2, y, mask
 
 def set_loader(opt):
-    if opt.pairing:
-        x_train_1, x_train_2, y_train, mask_train = load_test_dataset_masked(opt, "train_C")
-    else:
-        x_train_1, x_train_2, y_train, mask_train = load_dataset_masked(opt)
-    x_test_1, x_test_2, y_test, mask_test = load_test_dataset_masked(opt, "test")
 
-    train_dataset = data.Multimodal_incomplete_dataset_direct_load(x_train_1, x_train_2, y_train, mask_train)
-    test_dataset = data.Multimodal_incomplete_dataset_direct_load(x_test_1, x_test_2,  y_test, mask_test)
+    train_dataset = data.Multimodal_dataset([], ['acc', 'gyro', 'mag'], root='train_C', opt=opt)
+    test_dataset = data.Multimodal_dataset([], ['acc', 'gyro', 'mag'], root='test', opt=opt)
 
     train_loader = torch.utils.data.DataLoader(
         train_dataset, batch_size=opt.batch_size,
@@ -119,22 +46,49 @@ def set_loader(opt):
 
 
 def set_model(opt):
-    # Get two class model
-    model = DualContrastiveIMUEncoder(opt)
+
+    model_template = ModEncoder()
+
+    common_acc_weight = f"../train/save_mmbind/save_train_AB_weighted_contrastive_{opt.load_pretrain}_acc_{opt.seed}_{opt.dataset_split}/models/lr_0.0001_decay_0.0001_bsz_64/last.pth"
+    common_gyro_weight = f"../train/save_mmbind/save_train_AB_weighted_contrastive_{opt.load_pretrain}_gyro_{opt.seed}_{opt.dataset_split}/models/lr_0.0001_decay_0.0001_bsz_64/last.pth"
+    common_mag_weight = f"../train/save_mmbind/save_train_AB_weighted_contrastive_{opt.load_pretrain}_mag_{opt.seed}_{opt.dataset_split}/models/lr_0.0001_decay_0.0001_bsz_64/last.pth"
+
+    if opt.common_modality == 'acc':
+        weight = common_acc_weight
+        model = SupervisedGyroMag()
+    elif opt.common_modality == 'gyro':
+        weight = common_gyro_weight
+        model = SupervisedAccMag()
+    elif opt.common_modality == 'mag':
+        weight = common_mag_weight
+        model = SupervisedAccGyro()
+    else:
+        raise Exception("Error")
+    
+    print(f"=\tLoading {opt.common_modality} weight from {weight}")
+
+    model_template.load_state_dict(torch.load(weight)['model'])
+
+    model.gyro_encoder = model_template.gyro_encoder
+    model.mag_encoder = model_template.mag_encoder
+    model.acc_encoder = model_template.acc_encoder
+
     criterion = torch.nn.CrossEntropyLoss()
 
-    if opt.pairing:
-        weight = f"./save_baseline2_label/save_train_AB_incomplete_multimodal_no_load_{opt.common_modality}_{opt.seed}_{opt.dataset_split}/models/lr_0.0001_decay_0.0001_bsz_64/last.pth"
-        print(f"=\tLoading model pretrain weights from {weight}")
-        model.load_state_dict(torch.load(weight)['model'])
+    # enable synchronized Batch Normalization
+    # if opt.syncBN:
+        # model = apex.parallel.convert_syncbn_model(model)
 
     if torch.cuda.is_available():
+        # if torch.cuda.device_count() > 1:
+        #     model = torch.nn.DataParallel(model)
         model = model.cuda()
         criterion = criterion.cuda()
         cudnn.benchmark = True
 
-    return model, criterion
 
+
+    return model, criterion
 
 def train(train_loader, model, criterion, optimizer, epoch, opt):
     """one epoch training"""
@@ -150,20 +104,19 @@ def train(train_loader, model, criterion, optimizer, epoch, opt):
     label_list = []
     pred1_list = []
 
-    for idx, (input_data1, input_data2, labels, mask) in enumerate(train_loader):
+    for idx, batched_data in enumerate(train_loader):
         data_time.update(time.time() - end)
 
+        labels = batched_data['action']
+
         if torch.cuda.is_available():
-            input_data1 = input_data1.cuda()
-            input_data2 = input_data2.cuda()
             labels = labels.cuda()
-            mask = mask.cuda()
-        bsz = input_data1.shape[0]
+        bsz = labels.shape[0]
 
         # warm-up learning rate
         # warmup_learning_rate(opt, epoch, idx, len(train_loader), optimizer)
 
-        output, _, _ = model(input_data1, input_data2)
+        output = model(batched_data)
 
 
         label_list.extend(labels.cpu().numpy())
@@ -189,6 +142,24 @@ def train(train_loader, model, criterion, optimizer, epoch, opt):
         batch_time.update(time.time() - end)
         end = time.time()
 
+        # print info
+        # if (idx + 1) % opt.print_freq == 0:
+        #     print('Train: [{0}][{1}/{2}]\t'
+        #           'BT {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
+        #           'DT {data_time.val:.3f} ({data_time.avg:.3f})\t'
+        #           'loss {loss.val:.3f} ({loss.avg:.3f})\t'
+        #           'Acc@1 {top1.val:.3f} ({top1.avg:.3f})\t'.format(
+        #            epoch, idx + 1, len(train_loader), batch_time=batch_time,
+        #            data_time=data_time, loss=losses, top1=top1))
+        #     sys.stdout.flush()
+
+    # print("label_list:",label_list, len(label_list))
+    # print("pred1_list:",pred1_list)
+
+    F1score = f1_score(label_list, pred1_list, average=None)
+    # print('feature_f1:', F1score)
+
+
     return losses.avg, top1.avg
 
 
@@ -207,17 +178,18 @@ def validate(val_loader, model, criterion, opt):
 
     with torch.no_grad():
         end = time.time()
-        for idx, (input_data1, input_data2, labels, mask) in enumerate(val_loader):
+        for idx, batched_data in enumerate(val_loader):
+
+            labels = batched_data['action']
 
             if torch.cuda.is_available():
-                input_data1 = input_data1.cuda()
-                input_data2 = input_data2.cuda()
                 labels = labels.cuda()
-                mask = mask.cuda()
             bsz = labels.shape[0]
 
-            # forward
-            output, _, _ = model(input_data1, input_data2)
+            # warm-up learning rate
+            # warmup_learning_rate(opt, epoch, idx, len(train_loader), optimizer)
+
+            output = model(batched_data)
 
             label_list.extend(labels.cpu().numpy())
             pred_list.extend(output.max(1)[1].cpu().numpy())
@@ -228,10 +200,15 @@ def validate(val_loader, model, criterion, opt):
             rows = labels.cpu().numpy()
             cols = output.max(1)[1].cpu().numpy()
 
+            # print("labels:",rows)
+            # print("output:",cols)
+            # print("old confusion:",confusion)
+
             for label_index in range(labels.shape[0]):
                 confusion[rows[label_index], cols[label_index]] += 1
 
             # update metric
+            # acc, rec, prec, target_positive, pred_positive = rate_eval(output, labels, opt.num_class, topk=(1, 5))
             acc, _ = accuracy(output, labels, topk=(1, 5))
             # print("Compare acc, rec:", acc, rec)
 
@@ -242,6 +219,16 @@ def validate(val_loader, model, criterion, opt):
             batch_time.update(time.time() - end)
             end = time.time()
 
+            # if idx % opt.print_freq == 0:
+            #     print('Test: [{0}/{1}]\t'
+            #           'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
+            #           'Loss {loss.val:.4f} ({loss.avg:.4f})\t'
+            #           'Acc@1 {top1.val:.3f} ({top1.avg:.3f})\t'.format(
+            #            idx, len(val_loader), batch_time=batch_time,
+            #            loss=losses, top1=top1))
+
+
+    # print("test-f1-score", f1_score(label_list, pred_list, average=None))
 
     F1score_test = f1_score(label_list, pred_list, average="macro") # macro sees all class with the same importance
 
@@ -251,19 +238,12 @@ def validate(val_loader, model, criterion, opt):
     return losses.avg, top1.avg, confusion, F1score_test, label_list, pred_list
 
 
+
 def main():
-    opt = parse_option("save_baseline2_label", "incomplete_multimodal")
-    common_modality = opt.common_modality
-    other_modalities = [m for m in ['acc', 'gyro', 'mag'] if m != common_modality]
-    opt.mod1 = other_modalities[0]
-    opt.mod2 = other_modalities[1]
-
-    pprint(f"Common modality: {opt.common_modality}")
-    print(f"=\tCommon modality: {opt.common_modality}")
-
-
     best_acc = 0
-    best_f1 = 0
+    best_rec = 0
+    best_prec = 0
+    opt = parse_evaluation_option("sup_mmbind", "sup_mmbind_weighted")
 
     # build data loader
     train_loader, val_loader = set_loader(opt)
@@ -272,7 +252,12 @@ def main():
     model, criterion = set_model(opt)
 
     # build optimizer
-    optimizer = set_optimizer(opt, model)
+    # optimizer = set_optimizer(opt, model)
+
+    # build optimizer
+    optimizer = optim.Adam(model.parameters(),lr=opt.learning_rate,
+                # momentum=opt.momentum,
+                weight_decay=opt.weight_decay)
 
     # tensorboard
     # logger = tb_logger.Logger(logdir=opt.tb_folder, flush_secs=2)
@@ -282,10 +267,12 @@ def main():
     record_f1 = np.zeros(opt.epochs)
     record_acc_train = np.zeros(opt.epochs)
 
+    # training routine
     pprint(f"Start Training")
     for epoch in tqdm(range(1, opt.epochs + 1), desc=f'Epoch: ', unit='items', ncols=80, colour='green', bar_format='{l_bar}{bar}| {n_fmt}/{total_fmt}[{elapsed}<{remaining}]'):
         adjust_learning_rate(opt, optimizer, epoch)
 
+        # train for one epoch
         loss, train_acc = train(train_loader, model, criterion, optimizer, epoch, opt)
 
 
@@ -295,39 +282,40 @@ def main():
 
         if val_acc > best_acc:
             best_acc = val_acc
-            best_f1 = val_F1score
 
         record_loss[epoch-1] = loss
         record_acc[epoch-1] = val_acc
         record_f1[epoch-1] = val_F1score
         record_acc_train[epoch-1] = train_acc
-
+        
+        # if epoch % opt.save_freq == 0:
+        #     save_file = os.path.join(
+        #         opt.save_folder, 'ckpt_epoch_{epoch}.pth'.format(epoch=epoch))
+        #     save_model(model, optimizer, opt, epoch, save_file)
 
         label_list = np.array(label_list)
         pred_list = np.array(pred_list)
-        np.savetxt(opt.result_path+ "confusion.txt", confusion)
-        np.savetxt(opt.result_path + "label.txt", label_list)
-        np.savetxt(opt.result_path + "pred.txt", pred_list)
-        np.savetxt(opt.result_path + "loss.txt", record_loss)
-        np.savetxt(opt.result_path + "test_accuracy.txt", record_acc)
-        np.savetxt(opt.result_path + "test_f1.txt", record_f1)
-        np.savetxt(opt.result_path + "train_accuracy.txt", record_acc_train)
+        np.savetxt(os.path.join(opt.result_folder , "confusion.txt"), confusion)
+        np.savetxt(os.path.join(opt.result_folder , "label.txt"), label_list)
+        np.savetxt(os.path.join(opt.result_folder , "pred.txt"), pred_list)
+        np.savetxt(os.path.join(opt.result_folder , "loss.txt"), record_loss)
+        np.savetxt(os.path.join(opt.result_folder , "test_accuracy.txt"), record_acc)
+        np.savetxt(os.path.join(opt.result_folder , "test_f1.txt"), record_f1)
+        np.savetxt(os.path.join(opt.result_folder , "train_accuracy.txt"), record_acc_train)
     
-
+    # save the last model
     save_file = os.path.join(opt.save_folder, 'last.pth')
     save_model(model, optimizer, opt, opt.epochs, save_file)
 
     # print("result of {}:".format(opt.dataset))
     print('best accuracy: {:.3f}'.format(best_acc))
-    print('best f1: {:.3f}'.format(best_f1))
     print('last accuracy: {:.3f}'.format(val_acc))
     print('final F1:{:.3f}'.format(val_F1score))
 
     pprint('best accuracy: {:.3f}'.format(best_acc))
-    pprint('best f1: {:.3f}'.format(best_f1))
     pprint('last accuracy: {:.3f}'.format(val_acc))
     pprint('final F1:{:.3f}'.format(val_F1score))
-
+    # print("confusion:{:.3f}", confusion)
 
 
 

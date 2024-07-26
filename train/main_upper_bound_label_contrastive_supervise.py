@@ -64,12 +64,15 @@ def set_loader(opt):
 
     #load labeled train and test data
 
-    x1_train_A, x2_train_A, y_train_A = load_dual_dataset(opt, "train_A") # load mod 1 and mod 2 from train_A
-    x1_train_B, x2_train_B, y_train_B = load_dual_dataset(opt, "train_B") # load mod 1 and mod 2 from train_B
+    if opt.pairing:
+        x1_train, x2_train, y_train = load_dual_dataset(opt, "train_C")
+    else:
+        x1_train_A, x2_train_A, y_train_A = load_dual_dataset(opt, "train_A") # load mod 1 and mod 2 from train_A
+        x1_train_B, x2_train_B, y_train_B = load_dual_dataset(opt, "train_B") # load mod 1 and mod 2 from train_B
 
-    x1_train  = torch.concat((x1_train_A, x1_train_B), dim=0) # [b1, dim] + [b2, dim] -> [b, dim]
-    x2_train = torch.concat((x2_train_A, x2_train_B), dim=0) # [b1, dim] + [b2, dim] -> [b, dim]
-    y_train = torch.concat((y_train_A, y_train_B), dim=0)
+        x1_train  = torch.concat((x1_train_A, x1_train_B), dim=0) # [b1, dim] + [b2, dim] -> [b, dim]
+        x2_train = torch.concat((x2_train_A, x2_train_B), dim=0) # [b1, dim] + [b2, dim] -> [b, dim]
+        y_train = torch.concat((y_train_A, y_train_B), dim=0)
 
     x_test_1, x_test_2, y_test = load_dual_dataset(opt, "test")
 
@@ -90,6 +93,10 @@ def set_model(opt):
 
     # model = DualContrastiveIMUEncoder(input_size=1, num_classes=opt.num_class)
     model = DualContrastiveIMUEncoder(opt)
+    if opt.pairing:
+        weight = f"./save_upperbound_label/save_train_AB_contrastive_supervise_no_load_{opt.common_modality}_{opt.seed}_{opt.dataset_split}/models/lr_0.0001_decay_0.0001_bsz_64/last.pth"
+        print(f"=\tLoading model pretrain weights from {weight}")
+        model.load_state_dict(torch.load(weight)['model'])
 
     criterion1 = torch.nn.CrossEntropyLoss()
     criterion2 = ConFusionLoss(temperature=opt.temp)
@@ -116,7 +123,7 @@ def train(train_loader, model, criterion1, criterion2, optimizer, epoch, opt):
     end = time.time()
 
 
-    for idx, (input_data1, input_data2, labels) in enumerate(train_loader):
+    for idx, ((input_data1, input_data2), labels) in enumerate(train_loader):
         data_time.update(time.time() - end)
 
         if torch.cuda.is_available():
@@ -165,7 +172,7 @@ def validate(val_loader, model, criterion, opt):
 
     with torch.no_grad():
         end = time.time()
-        for idx, (input_data1, input_data2, labels) in enumerate(val_loader):
+        for idx, ((input_data1, input_data2), labels) in enumerate(val_loader):
 
             if torch.cuda.is_available():
                 input_data1 = input_data1.cuda()

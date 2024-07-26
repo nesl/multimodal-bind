@@ -1,19 +1,14 @@
-from __future__ import print_function
-
 import os
-import sys
-import argparse
 import time
-import math
 
 # import tensorboard_logger as tb_logger
 import torch
 import torch.backends.cudnn as cudnn
+import torch.optim as optim
 from torch.utils.data import ConcatDataset
 # from torchvision import transforms, datasets
 
 import numpy as np
-from tqdm import tqdm
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import f1_score
 
@@ -22,16 +17,21 @@ from shared_files.util import adjust_learning_rate, warmup_learning_rate, accura
 from shared_files.util import set_optimizer, save_model
 from shared_files import data_pre as data
 
-from models.imu_models import SupervisedAccGyro, SupervisedAccMag, SupervisedGyroMag
-
+from models.imu_models import SingleIMUEncoder, SupervisedIMU, SupervisedModEncoder
 from modules.option_utils import parse_evaluation_option
 from modules.print_utils import pprint
 
-
+from tqdm import tqdm
 
 def set_loader(opt):
 
-    train_dataset = data.Multimodal_dataset([], ['acc', 'gyro', 'mag'], root='train_C', opt=opt)
+    train_A_dataset = data.Multimodal_dataset([], ['acc', 'gyro', 'mag'], root='train_A', opt=opt)
+    train_B_dataset = data.Multimodal_dataset([], ['acc', 'gyro', 'mag'], root='train_B', opt=opt)
+    train_C_dataset = data.Multimodal_dataset([], ['acc', 'gyro', 'mag'], root='train_C', opt=opt)
+
+    train_dataset = ConcatDataset([train_A_dataset, train_B_dataset, train_C_dataset])
+
+    # train_dataset = ConcatDataset([train_A_dataset, train_B_dataset, train_C_dataset])
     test_dataset = data.Multimodal_dataset([], ['acc', 'gyro', 'mag'], root='test', opt=opt)
 
     train_loader = torch.utils.data.DataLoader(
@@ -44,27 +44,10 @@ def set_loader(opt):
     return train_loader, val_loader
 
 
+
 def set_model(opt):
 
-    mod = opt.common_modality
-    mod_space = ['acc', 'gyro', 'mag']
-    multi_mod_space = [[mod, m] for m in mod_space if m != mod]
-
-    opt.valid_mod = multi_mod_space
-
-    mod1, mod2 = opt.valid_mod[0][1], opt.valid_mod[1][1]
-
-    if 'gyro' in {mod1, mod2} and 'mag' in {mod1, mod2}:
-        print(f"=\tInitializing GyroMag model")
-        model = SupervisedGyroMag()
-    
-    if 'acc' in {mod1, mod2} and 'mag' in {mod1, mod2}:
-        print(f"=\tInitializing AccMag model")
-        model = SupervisedAccMag()
-    
-    if 'acc' in {mod1, mod2} and 'gyro' in {mod1, mod2}:
-        print(f"=\tInitializing AccGyro model")
-        model = SupervisedAccGyro()
+    model = SupervisedIMU()
 
     criterion = torch.nn.CrossEntropyLoss()
 
@@ -99,17 +82,14 @@ def train(train_loader, model, criterion, optimizer, epoch, opt):
             labels = labels.cuda()
         bsz = labels.shape[0]
 
-        # warm-up learning rate
-        # warmup_learning_rate(opt, epoch, idx, len(train_loader), optimizer)
-
         output = model(batched_data)
-        #print(output)
-        
+
 
         label_list.extend(labels.cpu().numpy())
         pred1_list.extend(output.max(1)[1].cpu().numpy())
         
         loss = criterion(output, labels)
+
 
         # acc, rec, prec, target_positive, pred_positive = rate_eval(output, labels, opt.num_class, topk=(1, 5))
         acc, _ = accuracy(output, labels, topk=(1, 5))
@@ -151,6 +131,7 @@ def validate(val_loader, model, criterion, opt):
         for idx, batched_data in enumerate(val_loader):
 
             labels = batched_data['action']
+
             if torch.cuda.is_available():
                 labels = labels.cuda()
             bsz = labels.shape[0]
@@ -170,6 +151,7 @@ def validate(val_loader, model, criterion, opt):
                 confusion[rows[label_index], cols[label_index]] += 1
 
             # update metric
+            # acc, rec, prec, target_positive, pred_positive = rate_eval(output, labels, opt.num_class, topk=(1, 5))
             acc, _ = accuracy(output, labels, topk=(1, 5))
             # print("Compare acc, rec:", acc, rec)
 
@@ -179,6 +161,7 @@ def validate(val_loader, model, criterion, opt):
             # measure elapsed time
             batch_time.update(time.time() - end)
             end = time.time()
+
 
     # print("test-f1-score", f1_score(label_list, pred_list, average=None))
 
@@ -194,7 +177,7 @@ def main():
     best_acc = 0
     best_rec = 0
     best_prec = 0
-    opt = parse_evaluation_option(exp_type="supfuse_lowerbound", exp_tag="supfuse_lowerbound")
+    opt = parse_evaluation_option(exp_type="all_mod_supervised_abc", exp_tag="all_mod_supervised_abc")
 
     # build data loader
     train_loader, val_loader = set_loader(opt)
@@ -203,7 +186,12 @@ def main():
     model, criterion = set_model(opt)
 
     # build optimizer
-    optimizer = set_optimizer(opt, model)
+    # optimizer = set_optimizer(opt, model)
+
+    # build optimizer
+    optimizer = optim.Adam(model.parameters(),
+                # momentum=opt.momentum,
+                weight_decay=opt.weight_decay)
 
     # tensorboard
     # logger = tb_logger.Logger(logdir=opt.tb_folder, flush_secs=2)
@@ -221,18 +209,9 @@ def main():
         # train for one epoch
         loss, train_acc = train(train_loader, model, criterion, optimizer, epoch, opt)
 
-        # tensorboard logger
-        # logger.log_value('train_loss', loss, epoch)
-        # logger.log_value('train_acc', train_acc, epoch)
-        # logger.log_value('learning_rate', optimizer.param_groups[0]['lr'], epoch)
-
         # evaluation
-        loss, val_acc, confusion, val_F1score, label_list, pred_list = validate(val_loader, model, criterion, opt)
-        # logger.log_value('val_loss', loss, epoch)
-        # logger.log_value('val_acc', val_acc, epoch)
-        # logger.log_value('val_f1', val_F1score, epoch)
+        val_loss, val_acc, confusion, val_F1score, label_list, pred_list = validate(val_loader, model, criterion, opt)
 
-        # val_F1 = 2 * val_rec * val_prec / (val_rec + val_prec)
 
         if val_acc > best_acc:
             best_acc = val_acc
@@ -241,13 +220,10 @@ def main():
         record_acc[epoch-1] = val_acc
         record_f1[epoch-1] = val_F1score
         record_acc_train[epoch-1] = train_acc
-        # if epoch % opt.save_freq == 0:
-        #     save_file = os.path.join(
-        #         opt.save_folder, 'ckpt_epoch_{epoch}.pth'.format(epoch=epoch))
-        #     save_model(model, optimizer, opt, epoch, save_file)
 
         label_list = np.array(label_list)
         pred_list = np.array(pred_list)
+    
         np.savetxt(os.path.join(opt.result_folder , "confusion.txt"), confusion)
         np.savetxt(os.path.join(opt.result_folder , "label.txt"), label_list)
         np.savetxt(os.path.join(opt.result_folder , "pred.txt"), pred_list)
@@ -255,16 +231,11 @@ def main():
         np.savetxt(os.path.join(opt.result_folder , "test_accuracy.txt"), record_acc)
         np.savetxt(os.path.join(opt.result_folder , "test_f1.txt"), record_f1)
         np.savetxt(os.path.join(opt.result_folder , "train_accuracy.txt"), record_acc_train)
-    
-    # save the last model
-    save_file = os.path.join(opt.save_folder, 'last.pth')
-    save_model(model, optimizer, opt, opt.epochs, save_file)
 
     # print("result of {}:".format(opt.dataset))
     print('best accuracy: {:.3f}'.format(best_acc))
     print('last accuracy: {:.3f}'.format(val_acc))
     print('final F1:{:.3f}'.format(val_F1score))
-    # print("confusion:{:.3f}", confusion)
 
     pprint('best accuracy: {:.3f}'.format(best_acc))
     pprint('last accuracy: {:.3f}'.format(val_acc))

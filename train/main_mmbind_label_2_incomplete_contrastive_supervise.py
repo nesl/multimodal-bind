@@ -101,27 +101,29 @@ def set_loader(opt):
     #load labeled train and test data
     print(f"=\tInitializing Dataloader")
 
-
-    if opt.use_pair:
-        folder_path = f"./save_mmbind_more_label_paired_data_{opt.common_modality}_{opt.seed}_{opt.dataset_split}/"
+    if opt.pairing:
+        x_train_1, x_train_2, y_train, mask_vector = load_test_dataset_masked(opt, "train_C")
     else:
-        folder_path = f"./save_mmbind_label_paired_data_{opt.common_modality}_{opt.seed}_{opt.dataset_split}/"
-    
-    print(f"=\tLoading data from path {folder_path}")
+        if opt.use_pair:
+            folder_path = f"./save_mmbind_more_label_paired_data_{opt.common_modality}_{opt.seed}_{opt.dataset_split}/"
+        else:
+            folder_path = f"./save_mmbind_label_paired_data_{opt.common_modality}_{opt.seed}_{opt.dataset_split}/"
+        
+        print(f"=\tLoading data from path {folder_path}")
 
-    x1_paired = np.load(folder_path + f"{opt.mod1}.npy")
-    x2_paired = np.load(folder_path + f"{opt.mod2}.npy")
-    y_paired = np.load(folder_path + f"label.npy")
-    
-    original_x_train_1, original_x_train_2, original_y_train, original_mask_vector = load_dataset_masked(opt)
-    x_train_1 = np.vstack((original_x_train_1, x1_paired))
-    x_train_2 = np.vstack((original_x_train_2, x2_paired))
-    y_train = np.hstack((original_y_train, y_paired))
-    
-    
-    paired_mask_vector = np.zeros((x1_paired.shape[0], 1))
+        x1_paired = np.load(folder_path + f"{opt.mod1}.npy")
+        x2_paired = np.load(folder_path + f"{opt.mod2}.npy")
+        y_paired = np.load(folder_path + f"label.npy")
+        
+        original_x_train_1, original_x_train_2, original_y_train, original_mask_vector = load_dataset_masked(opt)
+        x_train_1 = np.vstack((original_x_train_1, x1_paired))
+        x_train_2 = np.vstack((original_x_train_2, x2_paired))
+        y_train = np.hstack((original_y_train, y_paired))
+        
+        
+        paired_mask_vector = np.zeros((x1_paired.shape[0], 1))
 
-    mask_vector = np.vstack((paired_mask_vector, paired_mask_vector)) # mask vector is irrelevant anyway
+        mask_vector = np.vstack((paired_mask_vector, paired_mask_vector)) # mask vector is irrelevant anyway
 
     x_test_1, x_test_2, y_test, mask_test = load_test_dataset_masked(opt, "test")
 
@@ -142,6 +144,11 @@ def set_loader(opt):
 
 def set_model(opt):
     model = DualContrastiveIMUEncoder(opt)
+    if opt.pairing:
+        weight = f"./save_mmbind_label/save_train_AB_incomplete_contrastive_supervise_no_load_{opt.common_modality}_{opt.seed}_{opt.dataset_split}_usepair_{opt.use_pair}/models/lr_1e-5_decay_0.0001_bsz_64/last.pth"
+        print(f"=\tLoading model pretrain weights from {weight}")
+        model.load_state_dict(torch.load(weight)['model'])
+
 
     criterion1 = torch.nn.CrossEntropyLoss()
     criterion2 = ConFusionLoss(temperature=opt.temp)

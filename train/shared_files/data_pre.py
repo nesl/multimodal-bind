@@ -37,20 +37,44 @@ class Multimodal_dataset():
 			index_file_path = os.path.join(opt.indice_file, f"{root}.txt")
 			index_files = np.loadtxt(index_file_path, dtype=str)
 
+		if "train_all_paired_AB" in root:
+			self.similarity_A = np.load(root + "similarity_setA.npy", allow_pickle=True).item()
+			self.similarity_B = np.load(root + "similarity_setB.npy", allow_pickle=True).item()
+			self.similarity = []
+		else:
+			self.similarity = None
+
 		pprint(f"Loading Multimodal {valid_mods} datasets from {opt.processed_data_path} - {index_file_path}")
 		print(f"=\tLoading Multimodal {valid_mods} datasets from {opt.processed_data_path} - {index_file_path}")
 
 		for file in sorted(index_files):
-			if file[-4:] != ".npy" or "generated_AB" in root:
+			if file[-4:] != ".npy" or "generated_AB" in root or "similarity" in file:
 				continue
 
 			file_name = root + file if "train_all_paired_AB" in root else os.path.join(opt.processed_data_path, file)
 			self.data_arr.append(np.load(file_name, allow_pickle=True))
+			
+			last_data = self.data_arr[-1]
+
 			if "train_all_paired_AB" in root or "generated_AB" in root:
-				self.labels.append(int(file.split('_')[0]))
+				label = int(file.split('_')[0])
+				set_id = file.split('_')[1]
+				file_counter = file.split('_')[2].split('.')[0]
+				self.labels.append(label)
+
+				if set_id == "setA":
+					self.similarity.append(self.similarity_A[f'{label}_{set_id}_{file_counter}'])
+				elif set_id == "setB":
+					self.similarity.append(self.similarity_B[f'{label}_{set_id}_{file_counter}'])
+				else:
+					raise Exception(f'{label}_{set_id}_{file_counter}')
 			else:
 				self.labels.append(int(file.split('_')[1]))
+			
+
+
 			self.file_names.append(os.path.abspath(file_name))
+		
 		self.data_arr = np.array(self.data_arr)
 		self.labels = np.array(self.labels)
 	
@@ -72,6 +96,8 @@ class Multimodal_dataset():
 		data['action'] = label_mapping[self.labels[idx]] - 1 # zero index
 		data['valid_mods'] = self.valid_mods
 		data['data_path'] = self.file_names[idx]
+		if self.similarity is not None:
+			data['similarity'] = self.similarity[idx]
 		return data
 
 class Unimodal_dataset_direct_load():
@@ -123,7 +149,7 @@ class Multimodal_dataset_direct_load():
 
 		activity_label = self.labels[idx]
 
-		return sensor_data1, sensor_data2, activity_label
+		return (sensor_data1, sensor_data2), activity_label
 
 ## load data for masked input
 class Multimodal_incomplete_dataset_direct_load():

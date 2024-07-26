@@ -1,46 +1,32 @@
-import os
-import time
+from __future__ import print_function
 
+import os
+import sys
+import argparse
+import time
+import math
+import random
+
+# import tensorboard_logger as tb_logger
 import torch
 import torch.backends.cudnn as cudnn
 import torch.optim as optim
-
+# from torchvision import transforms, datasets
 
 import numpy as np
+from sklearn.model_selection import train_test_split
 from sklearn.metrics import f1_score
 
 from shared_files.util import AverageMeter
-from shared_files.util import adjust_learning_rate, accuracy
+from shared_files.util import adjust_learning_rate, warmup_learning_rate, accuracy
 from shared_files.util import set_optimizer, save_model
 from shared_files import data_pre as data
 
+from models.imu_models import DualSupervisedIMUEncoder
+
 from tqdm import tqdm
-from modules.option_utils import parse_option
+from modules.option_utils import parse_evaluation_option
 from modules.print_utils import pprint
-from models.imu_models import DualSupervisedIMUEncoder, UnimodalSupervisedIMUEncoder
-
-def load_single_modal_set(opt, mod, root):
-
-    print(f"=\tLoading data {mod} from {root}")
-    train_dataset = data.Multimodal_dataset([], [mod], root=root, opt=opt)
-    train_loader = torch.utils.data.DataLoader(
-        train_dataset, batch_size=opt.batch_size,
-        num_workers=opt.num_workers, pin_memory=True, shuffle=True)
-    
-    x = []
-    y = []
-    for _, batch in enumerate(train_loader):
-        batch_data = batch[mod]
-        labels = batch['action']
-
-        x.append(batch_data)
-        y.append(labels)
-    
-    # [nb] -> [nb * b]
-    x = torch.concatenate(x, dim=0)
-    y = torch.concatenate(y, dim=0)
-
-    return x, y
 
 def load_dual_modal_set(opt, mod, root):
 
@@ -69,22 +55,13 @@ def load_dual_modal_set(opt, mod, root):
 
     return x1, x2, y
 
+
 def set_loader(opt):
+    x1_train, x2_train, y_train = load_dual_modal_set(opt, [opt.mod1, opt.mod2], "train_C")
+    x1_test, x2_test, y_test = load_dual_modal_set(opt, [opt.mod1, opt.mod2], "test")
 
-    #load labeled train and test data
-    if opt.pairing:
-        x1_train, x2_train, y_train = load_dual_modal_set(opt, [opt.mod1, opt.mod2], "train_C")
-        x1_test, x2_test, y_test = load_dual_modal_set(opt, [opt.mod1, opt.mod2], "test")
-
-        train_dataset = data.Multimodal_dataset_direct_load(x1_train, x2_train, y_train)
-        test_dataset = data.Multimodal_dataset_direct_load(x1_test, x2_test, y_test)
-    else:
-        dataset = "train_A" if opt.common_modality == "gyro" else "train_B"
-        x_train, y_train = load_single_modal_set(opt, opt.common_modality, dataset)
-        x_test, y_test = load_single_modal_set(opt, opt.common_modality, "test")
-
-        train_dataset = data.Unimodal_dataset_direct_load(x_train, y_train)
-        test_dataset = data.Unimodal_dataset_direct_load(x_test, y_test)
+    train_dataset = data.Multimodal_dataset_direct_load(x1_train, x2_train, y_train)
+    test_dataset = data.Multimodal_dataset_direct_load(x1_test, x2_test, y_test)
 
     train_loader = torch.utils.data.DataLoader(
         train_dataset, batch_size=opt.batch_size,
@@ -95,29 +72,21 @@ def set_loader(opt):
 
     return train_loader, val_loader
 
+
 def set_model(opt):
 
+    model = DualSupervisedIMUEncoder(opt)
 
-
-    if opt.pairing:
-        print(f"=\tUsing additional data for pairing, loading model from earlier")
-        model = DualSupervisedIMUEncoder(opt)
-
-        weight1 = f"./save_baseline1_label/save_train_AB_unimodal_supervise_no_load_{opt.mod1}_{opt.seed}_{opt.dataset_split}/models/lr_0.0001_decay_0.0001_bsz_64/last.pth"
-        weight2 = f"./save_baseline1_label/save_train_AB_unimodal_supervise_no_load_{opt.mod2}_{opt.seed}_{opt.dataset_split}/models/lr_0.0001_decay_0.0001_bsz_64/last.pth"
-
-        model.mod1_encoder.load_state_dict({k[len('mod_encoder')+1:]: v for k, v in torch.load(weight1)['model'].items() if "mod_encoder" in k})
-        model.mod2_encoder.load_state_dict({k[len('mod_encoder')+1:]: v for k, v in torch.load(weight2)['model'].items() if "mod_encoder" in k})
-    else:
-        print(f"=\tInitializing Supervised IMU Encoder for modality {opt.common_modality}")    
-        model = UnimodalSupervisedIMUEncoder(opt)
     criterion = torch.nn.CrossEntropyLoss()
+
     if torch.cuda.is_available():
         model = model.cuda()
         criterion = criterion.cuda()
         cudnn.benchmark = True
 
+        
     return model, criterion
+
 
 
 def train(train_loader, model, criterion, optimizer, epoch, opt):
@@ -131,31 +100,24 @@ def train(train_loader, model, criterion, optimizer, epoch, opt):
 
     end = time.time()
 
-    label_list = []
-    pred1_list = []
 
-    for idx, (data, labels) in enumerate(train_loader):
+    for idx, ((input_data1, input_data2), labels) in enumerate(train_loader):
         data_time.update(time.time() - end)
+
+        if torch.cuda.is_available():
+            input_data1 = input_data1.cuda()
+            input_data2 = input_data2.cuda()
+            labels = labels.cuda()
         bsz = labels.shape[0]
-        labels = labels.cuda()
 
-        if opt.pairing:
-            input_data1 = data[0].cuda()
-            input_data2 = data[1].cuda()
-            output = model(input_data1, input_data2)
-        else:
-            input_data1 = data.cuda()
-            output = model(input_data1)
 
-        label_list.extend(labels.cpu().numpy())
-        pred1_list.extend(output.max(1)[1].cpu().numpy())
-        
+        output = model(input_data1, input_data2)
+
         loss = criterion(output, labels)
-
-        acc, _ = accuracy(output, labels, topk=(1, 5))
 
         # update metric
         losses.update(loss.item(), bsz)
+        acc, _ = accuracy(output, labels, topk=(1, 5))
         top1.update(acc[0], bsz)
 
         # SGD
@@ -179,30 +141,32 @@ def validate(val_loader, model, criterion, opt):
     top1 = AverageMeter()
 
     confusion = np.zeros((opt.num_class, opt.num_class))
-
     label_list = []
     pred_list = []
 
     with torch.no_grad():
         end = time.time()
-        for idx, (data, labels) in enumerate(val_loader):
+        for idx, ((input_data1, input_data2), labels) in enumerate(val_loader):
 
+            if torch.cuda.is_available():
+                input_data1 = input_data1.cuda()
+                input_data2 = input_data2.cuda()
+                labels = labels.cuda()
             bsz = labels.shape[0]
-            labels = labels.cuda()
 
-            if opt.pairing:
-                input_data1 = data[0].cuda()
-                input_data2 = data[1].cuda()
-                output = model(input_data1, input_data2)
-            else:
-                input_data1 = data.cuda()
-                output = model(input_data1)
-
-            label_list.extend(labels.cpu().numpy())
-            pred_list.extend(output.max(1)[1].cpu().numpy())
-
+            # forward
+            output = model(input_data1, input_data2)    
 
             loss = criterion(output, labels)
+
+            # update metric
+            losses.update(loss.item(), bsz)
+            acc, _ = accuracy(output, labels, topk=(1, 5))
+            top1.update(acc[0], bsz)
+
+            # calculate and store confusion matrix
+            label_list.extend(labels.cpu().numpy())
+            pred_list.extend(output.max(1)[1].cpu().numpy())
 
             rows = labels.cpu().numpy()
             cols = output.max(1)[1].cpu().numpy()
@@ -211,17 +175,13 @@ def validate(val_loader, model, criterion, opt):
                 confusion[rows[label_index], cols[label_index]] += 1
 
             # update metric
-            acc, _ = accuracy(output, labels, topk=(1, 5))
-
             losses.update(loss.item(), bsz)
+            acc, _ = accuracy(output, labels, topk=(1, 5))
             top1.update(acc[0], bsz)
 
             # measure elapsed time
             batch_time.update(time.time() - end)
             end = time.time()
-
-
-    # print("test-f1-score", f1_score(label_list, pred_list, average=None))
 
     F1score_test = f1_score(label_list, pred_list, average="macro") # macro sees all class with the same importance
 
@@ -230,32 +190,38 @@ def validate(val_loader, model, criterion, opt):
 
     return losses.avg, top1.avg, confusion, F1score_test, label_list, pred_list
 
+
 def main():
 
-    opt = parse_option("save_baseline1_label", "unimodal_supervise")
+    opt = parse_evaluation_option("lowerbound_label", "lowerbound_label")
     common_modality = opt.common_modality
     other_modalities = [m for m in ['acc', 'gyro', 'mag'] if m != common_modality]
     opt.mod1 = other_modalities[0]
     opt.mod2 = other_modalities[1]
 
-    pprint(f"Common modality: {opt.common_modality}")
-    print(f"=\tCommon modality: {opt.common_modality}")
-
     best_acc = 0
     best_f1 = 0
 
     # build data loader
-    train_loader, val_loader = set_loader(opt)
+    train_loader, test_loader = set_loader(opt)
 
     # build model and criterion
     model, criterion = set_model(opt)
 
     # build optimizer
-    optimizer = set_optimizer(opt, model)
+    optimizer = optim.Adam([ 
+                {'params': model.mod1_encoder.parameters(), 'lr': 1e-4},   # 0
+                {'params': model.mod2_encoder.parameters(), 'lr': 1e-4},   # 0
+                {'params': model.classifier.parameters(), 'lr': opt.learning_rate}],
+                # momentum=opt.momentum,
+                weight_decay=opt.weight_decay)
 
-    record_loss = np.zeros(opt.epochs)
+    # tensorboard
+    # logger = tb_logger.Logger(logdir=opt.tb_folder, flush_secs=2)
+
     record_acc = np.zeros(opt.epochs)
     record_f1 = np.zeros(opt.epochs)
+    record_loss = np.zeros(opt.epochs)
     record_acc_train = np.zeros(opt.epochs)
 
     pprint(f"Start Training")
@@ -265,11 +231,7 @@ def main():
         # train for one epoch
         loss, train_acc = train(train_loader, model, criterion, optimizer, epoch, opt)
 
-
-        # evaluation
-        val_loss, val_acc, confusion, val_F1score, label_list, pred_list = validate(val_loader, model, criterion, opt)
-
-
+        val_loss, val_acc, confusion, val_F1score, label_list, pred_list = validate(test_loader, model, criterion, opt)
         if val_acc > best_acc:
             best_acc = val_acc
             best_f1 = val_F1score
@@ -281,14 +243,15 @@ def main():
 
         label_list = np.array(label_list)
         pred_list = np.array(pred_list)
-        np.savetxt(opt.result_path+ "confusion.txt", confusion)
-        np.savetxt(opt.result_path + "label.txt", label_list)
-        np.savetxt(opt.result_path + "pred.txt", pred_list)
-        np.savetxt(opt.result_path + "loss.txt", record_loss)
-        np.savetxt(opt.result_path + "test_accuracy.txt", record_acc)
-        np.savetxt(opt.result_path + "test_f1.txt", record_f1)
-        np.savetxt(opt.result_path + "train_accuracy.txt", record_acc_train)
-    
+        np.savetxt(os.path.join(opt.result_folder , "confusion.txt"), confusion)
+        np.savetxt(os.path.join(opt.result_folder , "label.txt"), label_list)
+        np.savetxt(os.path.join(opt.result_folder , "pred.txt"), pred_list)
+        np.savetxt(os.path.join(opt.result_folder , "loss.txt"), record_loss)
+        np.savetxt(os.path.join(opt.result_folder , "test_accuracy.txt"), record_acc)
+        np.savetxt(os.path.join(opt.result_folder , "test_f1.txt"), record_f1)
+        np.savetxt(os.path.join(opt.result_folder , "train_accuracy.txt"), record_acc_train)
+
+    # save the last model
     save_file = os.path.join(opt.save_folder, 'last.pth')
     save_model(model, optimizer, opt, opt.epochs, save_file)
 
@@ -302,6 +265,7 @@ def main():
     pprint('best f1: {:.3f}'.format(best_f1))
     pprint('last accuracy: {:.3f}'.format(val_acc))
     pprint('final F1:{:.3f}'.format(val_F1score))
+
 
 if __name__ == '__main__':
     main()
