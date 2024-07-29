@@ -1,4 +1,4 @@
-# MMBind: Multimodal Bind with the Shared Modality
+# MMBind: Binding Incomplete Multimodal Data with the Shared Modality
 This is a repo for SenSys 2024 submission: " MMBind: Unleashing the Potential of Distributed and Heterogeneous Data for Multimodal Learning in IoT ".
 
 # Requirements
