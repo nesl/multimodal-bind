@@ -1,7 +1,7 @@
 # MMBind - UTD dataset Acc Bind
 MMBind on UTD dataset, where the binding modality is the accelerometer data.
 
-## Processed UTD dataset for acc bind (Same as label bind)
+## Processed UTD dataset
 [https://drive.google.com/file/d/1xossSJyJZ51rB5xLvHsVaqgTKn5nmsQE/view?usp=sharing](https://drive.google.com/file/d/1xossSJyJZ51rB5xLvHsVaqgTKn5nmsQE/view?usp=sharing)
 
 ## Structure of Code
