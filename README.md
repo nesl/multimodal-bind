@@ -12,7 +12,7 @@ The program has been tested in the following environment:
 
 # MMbind Overview
 <p align="center" >
-	<img src="https://github.com/xmouyang/Cosmo/blob/main/materials/Overview.png" width="700">
+	<img src="https://github.com/nesl/multimodal-bind/blob/main/mmbind-overview.png" width="700">
 </p>
 
 * Stage 1 of MMbind: 
