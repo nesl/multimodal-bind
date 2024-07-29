@@ -21,5 +21,5 @@ MMBind on UTD dataset, where the binding modality is the accelerometer data.
 - Baseline 3: Incomplete multimodal + masked vector
 - Baseline 4: Cross-modal generation
 - Baseline 5: Dual contrastive
-- MMBind (origianl data + manually paired data by mmbind): Incomplete multimodal contrastive (data of three incomplete modalities)
+- **MMBind** (origianl data + manually paired data by mmbind): Incomplete multimodal contrastive (data of three incomplete modalities)
 - Upper Bound (all natually paired data): multimodal supervised learning, incomplete data for three-modaliy modal (data of two paired modalities)
