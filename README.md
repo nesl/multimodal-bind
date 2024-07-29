@@ -13,11 +13,8 @@ MMBind on UTD dataset, where the binding modality is the accelerometer data.
 - Baseline 3: Incomplete multimodal + masked vector
 - Baseline 4: Cross-modal generation (also three steps)
 - Baseline 5: Dual contrastive
-- mmbind_contarstive (manually paired data by mmbind): Single-modal autoencoder + multimodal contrastive (data of two paired modalities)
-- **mmbind_incomplete_contarstive** (origianl data + manually paired data by mmbind): Incomplete multimodal contrastive (data of three incomplete modalities)
-- Upper Bound (all natually paired data):
-  * Two modality fusion (main_upper_bound_2_fuse_contrastive.py): single-modal autoencoder + multimodal contrastive (data of two paired modalities)
-  * **Three modality fusion** (main_upper_bound_2_3M_contrastive.py): single-modal autoencoder + three multimodal contrastive (data of three paired modalities)
+- **MMBind** (origianl data + manually paired data by mmbind): Incomplete multimodal contrastive (data of three incomplete modalities)
+- Upper Bound (all natually paired data): single-modal autoencoder + three multimodal contrastive (data of three paired modalities)
 
 #Evaluate
 - Lower_bound: Limited labeled paired data for supervised model finetuening
@@ -26,8 +23,5 @@ MMBind on UTD dataset, where the binding modality is the accelerometer data.
 - Baseline 3: Incomplete multimodal + masked vector
 - Baseline 4: Cross-modal generation
 - Baseline 5: Dual contrastive
-- mmbind_contarstive (manually paired data by mmbind): Single-modal autoencoder + multimodal contrastive (data of two paired modalities)
-- mmbind_incomplete_contarstive (origianl data + manually paired data by mmbind): Incomplete multimodal contrastive (data of three incomplete modalities)
-- Upper Bound (all natually paired data): 
-  * Two modality fusion (main_fuse_sup_upper_bound.py): multimodal supervised learning (data of two paired modalities)
-  * **Three modality fusion** (main_fuse_sup_upper_bound_3M.py): multimodal supervised learning, incomplete data for three-modaliy modal (data of two paired modalities)
+- MMBind (origianl data + manually paired data by mmbind): Incomplete multimodal contrastive (data of three incomplete modalities)
+- Upper Bound (all natually paired data): multimodal supervised learning, incomplete data for three-modaliy modal (data of two paired modalities)
