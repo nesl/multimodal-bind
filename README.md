@@ -1,6 +1,7 @@
 # Multimodal-Bind
 MMBind: Unleashing the Potential of Distributed and Heterogeneous Data for Multimodal Learning in IoT
 
+This is a repo for SenSys 2024 submission: " MMBind: Unleashing the Potential of Distributed and Heterogeneous Data for Multimodal Learning in IoT ".
 
 # UTD dataset
 
