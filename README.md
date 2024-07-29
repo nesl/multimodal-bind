@@ -1,5 +1,5 @@
 # Multimodal-Bind
-Multimodal Embedding Learning with Distributed Incomplete Data
+MMBind: Unleashing the Potential of Distributed and Heterogeneous Data for Multimodal Learning in IoT
 
 
 # UTD dataset
