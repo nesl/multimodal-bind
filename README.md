@@ -5,8 +5,6 @@ MMBind on UTD dataset, where the binding modality is the accelerometer data.
 [https://drive.google.com/file/d/1xossSJyJZ51rB5xLvHsVaqgTKn5nmsQE/view?usp=sharing](https://drive.google.com/file/d/1xossSJyJZ51rB5xLvHsVaqgTKn5nmsQE/view?usp=sharing)
 
 ## Structure of Code
-**mmbind_incomplete_contarstive** has the best performance, without loading pretrained single-modal autoencoder.
-
 #Train
 - Baseline 1: Single-modal autoencoder
 - Baseline 2: Incomplete multimodal
