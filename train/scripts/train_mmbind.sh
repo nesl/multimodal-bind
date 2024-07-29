@@ -3,7 +3,7 @@ cd ..
 
 for seed in 41 42 43 44 45;
 do
-    # python3 main_mmbind_1_unimod_autencoder.py --seed $seed --common_modality acc --gpu 3 --dataset_split split_label0
+    python3 main_mmbind_1_unimod_autencoder.py --seed $seed --common_modality acc --gpu 3 --dataset_split split_label0
 
     # remove duplicate files
     cd save_mmbind
@@ -31,8 +31,8 @@ do
     cp "train_setB_paired_AB_acc_"$seed"_split_0"/* "train_all_paired_AB_acc_"$seed"_split_0"
     cd ..
 
-    # python3 main_mmbind_3_fuse_contrastive.py --seed $seed --common_modality acc --gpu 3 --dataset_split split_0
-    # python3 main_mmbind_3_incomplete_contrastive.py --seed $seed --common_modality acc --gpu 3 --dataset_split split_0
+    python3 main_mmbind_3_fuse_contrastive.py --seed $seed --common_modality acc --gpu 3 --dataset_split split_0
+    python3 main_mmbind_3_incomplete_contrastive.py --seed $seed --common_modality acc --gpu 3 --dataset_split split_0
 done
 
 # cd ../evaluation
