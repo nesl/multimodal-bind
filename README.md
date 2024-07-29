@@ -1,13 +1,29 @@
-# Multimodal-Bind
-MMBind: Unleashing the Potential of Distributed and Heterogeneous Data for Multimodal Learning in IoT
-
+# MMBind: Multimodal Bind with the Shared Modality
 This is a repo for SenSys 2024 submission: " MMBind: Unleashing the Potential of Distributed and Heterogeneous Data for Multimodal Learning in IoT ".
 
-# UTD dataset
+# Requirements
+The program has been tested in the following environment: 
+* Python 3.9.7
+* Pytorch 1.8.1
+* torchvision 0.9.1
+* sklearn 0.24.2
+* opencv-python 4.5.5
+* numpy 1.20.3
 
-## Code of UTD dataset
-TODO
+# MMbind Overview
+<p align="center" >
+	<img src="https://github.com/xmouyang/Cosmo/blob/main/materials/Overview.png" width="700">
+</p>
 
-## Processed UTD dataset for skeleton bind
-https://drive.google.com/drive/folders/1gqVcOg5tagfdNNQ9d81oV0AReh--p_O1?usp=sharing
+* Stage 1 of MMbind: 
+	* pairing incomplete data with shared modalities;
+* Stage 2 of MMbind: 
+	*  weighted contrastive learning with heterogeneous data.
+
+# Project Strcuture
+* Cross-subject Evaluation
+  * Evaluation on UTD dataset
+  * Evaluation on MMFI dataset
+  * Evaluation on PAMAP2 dataset
+* Cross-dataset Evaluation
 
