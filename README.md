@@ -21,9 +21,10 @@ The program has been tested in the following environment:
 	*  weighted contrastive learning with heterogeneous data.
 
 # Project Strcuture
-* Cross-subject Evaluation
+* Cross-subject Evaluation:
   * Evaluation on UTD dataset
   * Evaluation on MMFI dataset
   * Evaluation on PAMAP2 dataset
-* Cross-dataset Evaluation
+* Cross-dataset Evaluation:
+  * Training on binded MotionSense and Shoaib datasets, testing on RealWorld dataset.
 
