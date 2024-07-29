@@ -2,13 +2,12 @@
 MMBind on UTD dataset, where the binding modality is the accelerometer data.
 
 ## Processed UTD dataset for acc bind (Same as label bind)
-[https://drive.google.com/drive/folders/1gqVcOg5tagfdNNQ9d81oV0AReh--p_O1?usp=sharing](https://drive.google.com/file/d/136zY2L2krizCKf1MPEXY4AwJ09oylty4/view?usp=sharing)
+[https://drive.google.com/file/d/1xossSJyJZ51rB5xLvHsVaqgTKn5nmsQE/view?usp=sharing](https://drive.google.com/file/d/1xossSJyJZ51rB5xLvHsVaqgTKn5nmsQE/view?usp=sharing)
 
-## Code of UTD dataset
+## Structure of Code
 **mmbind_incomplete_contarstive** has the best performance, without loading pretrained single-modal autoencoder.
 
-
-#train
+#Train
 - Baseline 1: Single-modal autoencoder
 - Baseline 2: Incomplete multimodal
 - Baseline 3: Incomplete multimodal + masked vector
@@ -20,7 +19,7 @@ MMBind on UTD dataset, where the binding modality is the accelerometer data.
   * Two modality fusion (main_upper_bound_2_fuse_contrastive.py): single-modal autoencoder + multimodal contrastive (data of two paired modalities)
   * **Three modality fusion** (main_upper_bound_2_3M_contrastive.py): single-modal autoencoder + three multimodal contrastive (data of three paired modalities)
 
-#evaluate
+#Evaluate
 - Lower_bound: Limited labeled paired data for supervised model finetuening
 - Baseline 1: Single-modal autoencoder
 - Baseline 2: Incomplete multimodal
