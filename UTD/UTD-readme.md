@@ -34,7 +34,4 @@ python3 XXX.py --learning_rate XXX
 ```
 
 **Description of each option**
-- `--seed`: the seed of the experiment, used 41-45
-- `--gpu`: Specify which GPU to use (single GPU only)
-- `--dataset_split`: Specify the dataset split (or the index folder) to use, explore different splitting methods
-- `--common_modality`: The binding modality, explore different modality used as the binding mod. For baselines which do not use the binding modality, the reference modalities (modalities that do not have pairs) are automatically selected with the binding modality. 
+- `--learning_rate`: the learning rate of the experiment
