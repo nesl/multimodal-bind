@@ -63,4 +63,4 @@ MMBind on the UTD dataset, where the binding modality is the accelerometer data 
 
 ## Usage
 
-Scripts are available for sensor binding and label binding experiments. See `scripts/`.
+Scripts are available for sensor binding and label binding experiments. See `scripts/` in each subfolder.
