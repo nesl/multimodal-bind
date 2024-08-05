@@ -22,7 +22,7 @@ The program has been tested in the following environment:
 
 # Project Strcuture
 * Cross-subject Evaluation:
-  * [Evaluation on UTD dataset](https://github.com/nesl/multimodal-bind/blob/main/UTD/UTD-readme.md)
+  * [Evaluation on UTD dataset](https://github.com/nesl/multimodal-bind/blob/main/UTD/UTD-README.md)
   * Evaluation on MMFI dataset
   * Evaluation on PAMAP2 dataset
 * Cross-dataset Evaluation:
