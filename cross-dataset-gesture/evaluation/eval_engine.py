@@ -40,7 +40,6 @@ def eval_loop(opt, epoch, model, loss_func, dataloader, optimizer):
         loss = loss_func(logits, labels)
 
         acc, _ = accuracy(logits, labels, topk=(1, 5))
-        # update metric
 
         losses.update(loss.item(), bsz)
         top1.update(acc[0], bsz)
@@ -61,7 +60,7 @@ def validate(opt, val_loader, model, criterion):
     losses = AverageMeter()
     top1 = AverageMeter()
 
-    confusion = np.zeros((opt.num_class, opt.num_class))
+    confusion = np.zeros((opt.num_class, opt.num_class)).astype(int)
 
     label_list = []
     pred_list = []
@@ -122,6 +121,7 @@ def eval_engine(opt, model, loss_func, train_dataloader, val_dataloader):
             val_loss, val_acc, confusion, val_F1score, label_list, pred_list = validate(opt, val_dataloader, model, loss_func)
 
             log.logprint(f"Val Loss: {val_loss:.4f}, Val Acc: {val_acc:.4f}, F1: {val_F1score:.4f}")
+            print(confusion)
             
             if val_acc > best_acc:
                 best_acc = val_acc
@@ -141,7 +141,6 @@ def eval_engine(opt, model, loss_func, train_dataloader, val_dataloader):
             np.savetxt(opt.result_path + "test_accuracy.txt", record_acc)
             np.savetxt(opt.result_path + "test_f1.txt", record_f1)
             np.savetxt(opt.result_path + "train_accuracy.txt", record_acc_train)
-
     # save the last model
     save_file = os.path.join(opt.save_folder, "last.pth")
     save_model(model, optimizer, opt, opt.epochs, save_file)

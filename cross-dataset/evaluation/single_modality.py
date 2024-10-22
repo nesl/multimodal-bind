@@ -260,7 +260,9 @@ class skeleton_encoder(nn.Module):
     def __init__(self, input_size):
         super().__init__()
 
+
         # Extract features, 3D conv layers
+        #  (40, 20, 3) -> 16 * 448
         self.features = nn.Sequential(
             nn.Conv3d(input_size, 64, [5,5,2]),
             nn.BatchNorm3d(64),
@@ -286,8 +288,7 @@ class skeleton_encoder(nn.Module):
             nn.Conv3d(32, 16, [3,3,1]),
             nn.BatchNorm3d(16),
             nn.ReLU(inplace=True),
-
-            )
+        )
         
 
         self.gru = nn.GRU(448, 120, 2, batch_first=True)

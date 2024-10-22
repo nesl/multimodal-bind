@@ -8,52 +8,66 @@ INPUT_SIZE = {"skeleton": (30, 63), "stereo_ir": (30, 171, 224), "depth": (30, 1
 class SkeletonEncoder(nn.Module):
     def __init__(self):
         super(SkeletonEncoder, self).__init__()
-        
-        # 30, 21, 3
 
-        # Extract features, 3D conv layers
+        #  (40, 20, 3)
+        #  (30, 21, 3)
         self.features = nn.Sequential(
-            # Conv Block 1
-            nn.Conv3d(1, 64, kernel_size=(3, 3, 2), padding=(1, 1, 1)),
+            nn.Conv3d(1, 64, [5, 5, 2]),
             nn.BatchNorm3d(64),
             nn.ReLU(inplace=True),
             nn.Dropout(),
-            nn.MaxPool3d(kernel_size=(2, 2, 1), stride=(1, 1, 1)),
 
-            # # Conv Block 2
-            nn.Conv3d(64, 128, kernel_size=(3, 3, 1), padding=(1, 1, 1)),
-            nn.ReLU(inplace=True),
-            nn.Dropout(),
-
-            # # Conv Block 3
-            nn.Conv3d(128, 256, kernel_size=(3, 3, 1), padding=(1, 1, 1)),
-            nn.ReLU(inplace=True),
-            nn.Dropout(),
-            # nn.MaxPool3d(kernel_size=(2, 2, 2), stride=(2, 2, 2)),
-
-            # # Conv Block 4
-            nn.Conv3d(256, 512, kernel_size=(3, 3, 1), padding=(1, 1, 1)),
+            nn.Conv3d(64, 64, [3, 3, 1]),
+            nn.BatchNorm3d(64),
             nn.ReLU(inplace=True),
             nn.Dropout(),
             
-            nn.Conv3d(512, 512, kernel_size=(3, 3, 1), padding=(1, 1, 1)),
+            nn.Conv3d(64, 64, [3, 3, 1]),
+            nn.BatchNorm3d(64),
             nn.ReLU(inplace=True),
             nn.Dropout(),
-            nn.MaxPool3d(kernel_size=(2, 2, 1), stride=(2, 2, 2)),
-
-            # Global Avg Pooling
-            nn.AdaptiveAvgPool3d((1, 1, 1))
+            
+            nn.Conv3d(64, 32, [3, 3, 1]),
+            nn.BatchNorm3d(32),
+            nn.ReLU(inplace=True),
+            nn.Dropout(),
+            
+            nn.Conv3d(32, 16, [3, 3, 1]),
+            nn.BatchNorm3d(16),
+            nn.ReLU(inplace=True),
         )
-        self.gru = nn.GRU(162, 120, 2, batch_first=True)
+        self.gru = nn.GRU(324, 120, 2, batch_first=True)
+        # self.features = nn.Sequential(
+        #     # First block: Conv3D -> BatchNorm -> ReLU -> MaxPool
+        #     nn.Conv3d(1, 64, kernel_size=(3, 3, 1), stride=1, padding=1),
+        #     nn.BatchNorm3d(16),
+        #     nn.ReLU(),
+        #     nn.MaxPool3d(kernel_size=(2, 2, 2), stride=(2, 2, 2)),
+            
+        #     # Second block: Conv3D -> BatchNorm -> ReLU -> MaxPool
+        #     nn.Conv3d(16, , kernel_size=(3, 3, 3), stride=1, padding=1),
+        #     nn.BatchNorm3d(32),
+        #     nn.ReLU(),
+        #     nn.MaxPool3d(kernel_size=(2, 2, 2), stride=(2, 2, 2)),
+            
+        #     # Third block: Conv3D -> BatchNorm -> ReLU -> MaxPool
+        #     nn.Conv3d(32, 64, kernel_size=(3, 3, 3), stride=1, padding=1),
+        #     nn.BatchNorm3d(64),
+        #     nn.ReLU(),
+        #     nn.MaxPool3d(kernel_size=(2, 2, 2), stride=(2, 2, 2))
+        # )
 
+    # 1920
     def forward(self, x):
         b, t, c = x.size()
         x = x.view(b, t, c // 3, 3)
-
         x = x.unsqueeze(1)
+        
+        # print(x.size())
         x = self.features(x)
+        # x = x.view(x.size(0), 16, -1)
+        # x, _ = self.gru(x)
         x = x.reshape(x.size(0), -1)
-
         return x
 
 
@@ -62,43 +76,61 @@ class StereoEncoder(nn.Module):
         super(StereoEncoder, self).__init__()
         input_size = INPUT_SIZE["stereo_ir"][1]
         log.logprint(f"Initializing Stereo IR Encoder with input shape: {input_size}")
-        # Extract features, 3D conv layers
 
+        # self.features = nn.Sequential(
+        #     nn.Conv3d(1, 64, [2, 7, 7]),
+        #     nn.BatchNorm3d(64),
+        #     nn.ReLU(inplace=True),
+        #     nn.Dropout(),
+        #     nn.MaxPool3d(kernel_size=(2, 2, 2)),
+            
+        #     nn.Conv3d(64, 64, [1, 5, 5]),
+        #     nn.BatchNorm3d(64),
+        #     nn.ReLU(inplace=True),
+        #     nn.Dropout(),
+        #     nn.MaxPool3d(kernel_size=(1, 5, 5)),
+            
+        #     nn.Conv3d(64, 64, [1, 3, 3]),
+        #     nn.BatchNorm3d(64),
+        #     nn.ReLU(inplace=True),
+        #     nn.Dropout(),
+            
+        #     nn.Conv3d(64, 32, [3, 3, 3]),
+        #     nn.BatchNorm3d(32),
+        #     nn.ReLU(inplace=True),
+        #     nn.Dropout(),
+            
+        #     nn.Conv3d(32, 16, [3, 3, 3]),
+        #     nn.BatchNorm3d(16),
+        #     nn.ReLU(inplace=True),
+        # )
         self.features = nn.Sequential(
-            # Conv Block 1
-            nn.Conv3d(1, 64, kernel_size=(3, 7, 7), padding=(1, 1, 1)),
+            # First block: Conv3D -> BatchNorm -> ReLU -> MaxPool
+            nn.Conv3d(1, 32, kernel_size=(3, 3, 3), stride=1, padding=1),
+            nn.BatchNorm3d(32),
             nn.ReLU(),
-            nn.Dropout(),
-            nn.MaxPool3d(kernel_size=(1, 5, 5), stride=(1, 3, 3)),
-
-            # Conv Block 2
-            nn.Conv3d(64, 128, kernel_size=(3, 3, 3), padding=(1, 1, 1)),
-            nn.ReLU(),
-            nn.Dropout(),
-            nn.MaxPool3d(kernel_size=(1, 5, 5), stride=(1, 3, 3)),
-
-            # Conv Block 3
-            nn.Conv3d(128, 256, kernel_size=(3, 3, 3), padding=(1, 1, 1)),
-            nn.ReLU(),
-            nn.Dropout(),
             nn.MaxPool3d(kernel_size=(2, 2, 2), stride=(2, 2, 2)),
-
-            # Conv Block 4
-            nn.Conv3d(256, 512, kernel_size=(3, 3, 3), padding=(1, 1, 1)),
+            
+            # Second block: Conv3D -> BatchNorm -> ReLU -> MaxPool
+            nn.Conv3d(32, 64, kernel_size=(3, 3, 3), stride=1, padding=1),
+            nn.BatchNorm3d(64),
             nn.ReLU(),
-            nn.Dropout(),
             nn.MaxPool3d(kernel_size=(2, 2, 2), stride=(2, 2, 2)),
-
-            # Conv Block 5
-            nn.Conv3d(512, 512, kernel_size=(3, 3, 3), padding=(1, 1, 1)),
+            
+            # Third block: Conv3D -> BatchNorm -> ReLU -> MaxPool
+            nn.Conv3d(64, 32, kernel_size=(3, 3, 3), stride=1, padding=1),
+            nn.BatchNorm3d(32),
             nn.ReLU(),
-            nn.Dropout(),
-            nn.MaxPool3d(kernel_size=(1, 2, 2), stride=(2, 2, 2), padding=(0, 1, 1)),
-
-            # Global Average Pooling
-            nn.AdaptiveAvgPool3d((1, 1, 1))
+            nn.MaxPool3d(kernel_size=(2, 2, 2), stride=(2, 2, 2)),
+            
+            nn.Conv3d(32, 32, kernel_size=(3, 3, 3), stride=1, padding=1),
+            nn.BatchNorm3d(32),
+            nn.ReLU(),
+            nn.MaxPool3d(kernel_size=(2, 2, 2), stride=(2, 2, 2)),
         )
-                          
+        
+        # self.gru = nn.GRU(360, 120, 2, batch_first=True)
+
     def forward(self, x):
         x = x.view(x.size(0), 1, 30, 112, 112)
         x = self.features(x)
@@ -112,44 +144,62 @@ class DepthEncoder(nn.Module):
         input_size = INPUT_SIZE["depth"][1]
         log.logprint(f"Initializing Depth Encoder with input shape: {input_size}")
 
-        # Extract features, 3D conv layers from input (112, 1122)
+        # self.features = nn.Sequential(
+        #     nn.Conv3d(1, 64, [2, 7, 7]),
+        #     nn.BatchNorm3d(64),
+        #     nn.ReLU(inplace=True),
+        #     nn.Dropout(),
+        #     nn.MaxPool3d(kernel_size=(2, 2, 2)),
+            
+        #     nn.Conv3d(64, 64, [1, 5, 5]),
+        #     nn.BatchNorm3d(64),
+        #     nn.ReLU(inplace=True),
+        #     nn.Dropout(),
+        #     nn.MaxPool3d(kernel_size=(1, 5, 5)),
+            
+        #     nn.Conv3d(64, 64, [1, 3, 3]),
+        #     nn.BatchNorm3d(64),
+        #     nn.ReLU(inplace=True),
+        #     nn.Dropout(),
+            
+        #     nn.Conv3d(64, 32, [3, 3, 3]),
+        #     nn.BatchNorm3d(32),
+        #     nn.ReLU(inplace=True),
+        #     nn.Dropout(),
+            
+        #     nn.Conv3d(32, 16, [3, 3, 3]),
+        #     nn.BatchNorm3d(16),
+        #     nn.ReLU(inplace=True),
+        # )
         self.features = nn.Sequential(
-            # Conv Block 1
-            nn.Conv3d(1, 64, kernel_size=(3, 7, 7), padding=(1, 1, 1)),
+            # First block: Conv3D -> BatchNorm -> ReLU -> MaxPool
+            nn.Conv3d(1, 32, kernel_size=(3, 3, 3), stride=1, padding=1),
+            nn.BatchNorm3d(32),
             nn.ReLU(),
-            nn.Dropout(),
-            nn.MaxPool3d(kernel_size=(1, 5, 5), stride=(1, 3, 3)),
-
-            # Conv Block 2
-            nn.Conv3d(64, 128, kernel_size=(3, 3, 3), padding=(1, 1, 1)),
-            nn.ReLU(),
-            nn.Dropout(),
-            nn.MaxPool3d(kernel_size=(1, 5, 5), stride=(1, 3, 3)),
-
-            # Conv Block 3
-            nn.Conv3d(128, 256, kernel_size=(3, 3, 3), padding=(1, 1, 1)),
-            nn.ReLU(),
-            nn.Dropout(),
             nn.MaxPool3d(kernel_size=(2, 2, 2), stride=(2, 2, 2)),
-
-            # Conv Block 4
-            nn.Conv3d(256, 512, kernel_size=(3, 3, 3), padding=(1, 1, 1)),
+            
+            # Second block: Conv3D -> BatchNorm -> ReLU -> MaxPool
+            nn.Conv3d(32, 64, kernel_size=(3, 3, 3), stride=1, padding=1),
+            nn.BatchNorm3d(64),
             nn.ReLU(),
-            nn.Dropout(),
             nn.MaxPool3d(kernel_size=(2, 2, 2), stride=(2, 2, 2)),
-
-            # Conv Block 5
-            nn.Conv3d(512, 512, kernel_size=(3, 3, 3), padding=(1, 1, 1)),
+            
+            # Third block: Conv3D -> BatchNorm -> ReLU -> MaxPool
+            nn.Conv3d(64, 32, kernel_size=(3, 3, 3), stride=1, padding=1),
+            nn.BatchNorm3d(32),
             nn.ReLU(),
-            nn.Dropout(),
-            nn.MaxPool3d(kernel_size=(1, 2, 2), stride=(2, 2, 2), padding=(0, 1, 1)),
-
-            # Global Average Pooling
-            nn.AdaptiveAvgPool3d((1, 1, 1))
+            nn.MaxPool3d(kernel_size=(2, 2, 2), stride=(2, 2, 2)),
+            
+            nn.Conv3d(32, 32, kernel_size=(3, 3, 3), stride=1, padding=1),
+            nn.BatchNorm3d(32),
+            nn.ReLU(),
+            nn.MaxPool3d(kernel_size=(2, 2, 2), stride=(2, 2, 2)),
         )
-                          
+        
+        # self.gru = nn.GRU(360, 120, 2, batch_first=True)
+
     def forward(self, x):
         x = x.view(x.size(0), 1, 30, 112, 112)
         x = self.features(x)
-        x = x.view(x.size(0), -1)
+        x = x.reshape(x.size(0), -1)
         return x

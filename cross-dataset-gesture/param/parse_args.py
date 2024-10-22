@@ -1,5 +1,6 @@
 import math
 import os
+import random
 
 
 import argparse
@@ -40,11 +41,11 @@ def parse_option():
                         help='batch_size')
     parser.add_argument('--epochs', type=int, default=300,
                         help='number of training epochs')
-    parser.add_argument('--learning_rate', type=float, default=1e-4,
+    parser.add_argument('--learning_rate', type=float, default=5e-5,
                         help='learning rate')
     parser.add_argument('--momentum', type=float, default=0.9,
                         help='momentum')
-    parser.add_argument('--weight_decay', type=float, default=1e-4,
+    parser.add_argument('--weight_decay', type=float, default=5e-4,
                         help='weight decay')
     parser.add_argument('--lr_decay_epochs', type=str, default='350,400,450',
                         help='where to decay lr, can be a list')
@@ -105,8 +106,14 @@ def parse_option():
         raise ValueError(f"{opt.processed_data_path} not found")
 
     print(f"TODO: Set pretrain config here")
-    torch.manual_seed(opt.seed)
+    # Set the seed for numpy
+    # Set the seed for PyTorch
+    random.seed(opt.seed)
     np.random.seed(opt.seed)
+    torch.manual_seed(opt.seed)
+    torch.cuda.manual_seed(opt.seed)
+    torch.cuda.manual_seed_all(opt.seed)  # if you are using multi-GPU.
+    os.environ['PYTHONHASHSEED'] = str(opt.seed)
 
     # opt.valid_mods = ['acc', 'gyro'] if opt.dataset == 'train_A' else ['acc', 'mag']
     
@@ -114,7 +121,7 @@ def parse_option():
     if not os.path.exists("./weights"):
         os.makedirs("./weights")
 
-    opt.save_path = f'./weights/{exp_type}/{opt.dataset}_{exp_tag}_{opt.load_pretrain}_{opt.modality}_{opt.seed}_{opt.dataset_split}/'
+    opt.save_path = f'./weights/{exp_type}/{opt.dataset}_{exp_tag}_{opt.load_pretrain}_{opt.modality}_{opt.seed}_{opt.dataset_split}_{opt.label_ratio}/'
     
     print(f"TODO: Add different save path for mmbind pairs")
     # # set the path according to the environment
@@ -129,7 +136,7 @@ def parse_option():
     
     opt.model_path = opt.save_path + 'models'
     opt.tb_path = opt.save_path + 'tensorboard'
-    opt.result_path = opt.save_path + 'results/'
+    opt.result_path = opt.save_path + f'results/lr_{opt.learning_rate}_decay_{opt.lr_decay_rate}_bsz_{opt.batch_size}/'
 
     iterations = opt.lr_decay_epochs.split(',')
     opt.lr_decay_epochs = list([])

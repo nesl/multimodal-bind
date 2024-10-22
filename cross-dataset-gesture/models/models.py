@@ -10,7 +10,13 @@ mod_decoder_registry = {"skeleton": SkeletonDecoder, "stereo_ir": StereoDecoder,
 
 # mod_encoder_registry = {"skeleton": SkeletonEncoder}
 # mod_encoder_registry = {"stereo_ir": StereoEncoder}
-# mod_encoder_registry = {"depth": DepthEncoder}
+# mod_encoder_registry = {"stereo_ir": StereoEncoder, "depth": DepthEncoder}
+
+dims =  {
+    "skeleton": 5184,
+    "stereo_ir": 1568,
+    "depth": 1568
+}
 
 
 class UnimodalAutoencoders(nn.Module):
@@ -36,9 +42,11 @@ class GestureMultimodalEncoders(nn.Module):
         num_class = opt.num_class
 
         self.encoders = nn.ModuleDict({mod: mod_encoder_registry[mod]() for mod in modalities})
-
+        
+        total_dim = sum([dims[mod]for mod in modalities])
+        
         self.classifier = nn.Sequential(
-            nn.Linear(512 * 3, 1280),
+            nn.Linear(total_dim, 1280),
             nn.BatchNorm1d(1280),
             nn.ReLU(inplace=True),
             nn.Linear(1280, 128),
