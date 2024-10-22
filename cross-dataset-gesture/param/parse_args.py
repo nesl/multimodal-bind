@@ -1,14 +1,32 @@
 import math
 import os
-import logging
+
 
 import argparse
 import numpy as np
 import torch
 
-def parse_option(exp_type, exp_tag):
+import utils.log as log
+
+def set_auto(opt):
+    if opt.exp_type in {"lowerbound"}:
+        opt.stage = "eval"
+    else:
+        opt.stage = "train"
+    
+    if opt.dataset == "GR4DHCI":
+        opt.num_class = 8
+    elif opt.dataset == "DHG":
+        opt.num_class = 14
+    elif opt.dataset == "Briareo":
+        opt.num_class = 12
+    return opt
+
+def parse_option():
     parser = argparse.ArgumentParser('argument for training')
 
+    parser.add_argument('--exp_type', type=str, required=True)
+    parser.add_argument('--exp_tag', type=str, required=True)
     # system config
     parser.add_argument('--print_freq', type=int, default=1,
                         help='print frequency')
@@ -35,8 +53,8 @@ def parse_option(exp_type, exp_tag):
 
     # model dataset
     parser.add_argument('--model', type=str, default='MMBind')
-    parser.add_argument('--dataset', type=str, default='train_AB',
-                        choices=['Briareo', 'DHG', 'GR4DHCI'], help='dataset')
+    parser.add_argument('--dataset', type=str, required=True,
+                        choices=['Briareo', 'DHG', 'GR4DHCI'], help='dataset to use')
     parser.add_argument('--num_class', type=int, default=8,
                         help='num_class')
     # temperature
@@ -61,58 +79,54 @@ def parse_option(exp_type, exp_tag):
     # modality setting
     parser.add_argument('--modality', type=str, default="acc")
 
-    parser.add_argument('--dataset_split', type=str, default="user_split")
+    parser.add_argument('--dataset_split', type=str, default="random_split")
 
     parser.add_argument('--use_pair', type=bool, default=False)
 
     parser.add_argument("--pairing", type=bool, default=False)
 
     parser.add_argument("--load_pretrain", type=str, default="no_load")
+    
+    parser.add_argument("--label_ratio", type=float, default=1.0)
 
     opt = parser.parse_args()
     
-    raise NotImplementedError("Please implement the rest of the code")
-
-    print()
-    print("="*80)
-    print(f"=\tBegin Training of {exp_type} - {exp_tag}")
+    exp_type = opt.exp_type
+    exp_tag = opt.exp_tag
 
     # Dataset
-    opt.indice_file = f"../indices/{opt.dataset_split}"
+    opt.indice_file = f"./indices/{opt.dataset}/{opt.dataset_split}"
+
     if not os.path.exists(opt.indice_file):
         raise ValueError(f"{opt.indice_file} not found, please generate with preprocess.py/generate_index.py")
-    opt.processed_data_path = "/root/multimodal-bind/processed_data_all" if "label" in opt.dataset_split else "/root/multimodal-bind/processed_data"
+    
+    opt.processed_data_path = "/home/tkimura4/multimodal-bind/cross-dataset-gesture/gesture_recog_dataset_processed"
     if not os.path.exists(opt.processed_data_path):
         raise ValueError(f"{opt.processed_data_path} not found")
 
-    # Set load pretrain tag
-    if ("fuse" in exp_type and "mmbind" not in exp_type) or "fuse" in exp_tag or opt.load_pretrain == "load_pretrain":
-        print(f"=\tLoading pretrain for {exp_tag}_{exp_tag}")
-        opt.load_pretrain = "load_pretrain"
-    
-    if exp_type == "baseline4" and exp_tag == "fuse_contrastive":
-        opt.dataset = "train_all_generated_AB"
-        print(f"=\tSetting dataset to train_all_generated_AB for baseline4_fuse_contrastive")
-
-
+    print(f"TODO: Set pretrain config here")
     torch.manual_seed(opt.seed)
     np.random.seed(opt.seed)
 
-
-    # @TODO: Need to modify
-    opt.valid_mods = ['acc', 'gyro'] if opt.dataset == 'train_A' else ['acc', 'mag']
-
-    # set the path according to the environment
-    if "label" in exp_type and opt.pairing:
-        opt.save_path = f'./{exp_type}/save_{opt.dataset}_{exp_tag}_{opt.load_pretrain}_{opt.common_modality}_{opt.seed}_{opt.dataset_split}_usepair_{opt.use_pair}_data_pairing/'
-    elif "mmbind_label" in exp_type:
-        opt.save_path = f'./{exp_type}/save_{opt.dataset}_{exp_tag}_{opt.load_pretrain}_{opt.common_modality}_{opt.seed}_{opt.dataset_split}_usepair_{opt.use_pair}/'
-    elif "save_mmbind" in exp_type and ("unimod_autoencoder" in exp_tag or "contrastive" in exp_tag):
-        opt.save_path = f'./{exp_type}/save_{opt.dataset}_{exp_tag}_{opt.load_pretrain}_{opt.common_modality}_{opt.seed}_{opt.dataset_split}/'
-    else:
-        opt.save_path = f'./{exp_type}/save_{opt.dataset}_{exp_tag}_{opt.load_pretrain}_{opt.common_modality}_{opt.seed}_{opt.dataset_split}/'
+    # opt.valid_mods = ['acc', 'gyro'] if opt.dataset == 'train_A' else ['acc', 'mag']
     
-    print(f"=\tExperiment save path: {opt.save_path}")
+    
+    if not os.path.exists("./weights"):
+        os.makedirs("./weights")
+
+    opt.save_path = f'./weights/{exp_type}/{opt.dataset}_{exp_tag}_{opt.load_pretrain}_{opt.modality}_{opt.seed}_{opt.dataset_split}/'
+    
+    print(f"TODO: Add different save path for mmbind pairs")
+    # # set the path according to the environment
+    # if "label" in exp_type and opt.pairing:
+    #     opt.save_path = f'./{exp_type}/save_{opt.dataset}_{exp_tag}_{opt.load_pretrain}_{opt.common_modality}_{opt.seed}_{opt.dataset_split}_usepair_{opt.use_pair}_data_pairing/'
+    # elif "mmbind_label" in exp_type:
+    #     opt.save_path = f'./{exp_type}/save_{opt.dataset}_{exp_tag}_{opt.load_pretrain}_{opt.common_modality}_{opt.seed}_{opt.dataset_split}_usepair_{opt.use_pair}/'
+    # elif "save_mmbind" in exp_type and ("unimod_autoencoder" in exp_tag or "contrastive" in exp_tag):
+    #     opt.save_path = f'./{exp_type}/save_{opt.dataset}_{exp_tag}_{opt.load_pretrain}_{opt.common_modality}_{opt.seed}_{opt.dataset_split}/'
+    # else:
+    #     opt.save_path = f'./{exp_type}/save_{opt.dataset}_{exp_tag}_{opt.load_pretrain}_{opt.common_modality}_{opt.seed}_{opt.dataset_split}/'
+    
     opt.model_path = opt.save_path + 'models'
     opt.tb_path = opt.save_path + 'tensorboard'
     opt.result_path = opt.save_path + 'results/'
@@ -152,14 +166,19 @@ def parse_option(exp_type, exp_tag):
 
     # setup logger
     opt.log_file = os.path.join(opt.log_folder, f"train_{opt.learning_rate}_{opt.epochs}_{opt.seed}.log")
-    init_logger(opt.log_file)
-    pprint(f"Initialized log file to {opt.log_file}")
+    log.init_logger(opt.log_file)
+    log.divide(f"Begin Training of {exp_type} - {exp_tag}")
+    log.logprint(f"Experiment random seed: {opt.seed}")
+    log.logprint(f"Experiment save path: {opt.save_path}")
+    log.logprint(f"Initialized log file to {opt.log_file}")
+    
+    opt = set_auto(opt)
 
     # minor gpu setting, ignore 
     if opt.gpu != -1:
-        select_gpu(opt.gpu)
+        opt.device = select_gpu(opt.gpu)
 
-    return opt
+    return opt 
 
 def select_gpu(device):
     device = str(device).strip().lower().replace("cuda:", "").replace("none", "")  # to string, 'cuda:0' to '0'
@@ -172,10 +191,4 @@ def select_gpu(device):
         assert torch.cuda.is_available() and torch.cuda.device_count() >= len(
             device.replace(",", "")
         ), f"Invalid CUDA '--device {device}' requested, use '--device cpu' or pass valid CUDA device(s)"
-
-def init_logger(train_log_file):
-    logging.basicConfig(level=logging.INFO, handlers=[logging.FileHandler(train_log_file, mode="w")], force=True)
-
-def pprint(content):
-    logging.info(f"===\t{content}")
-    print(f"===\t{content}")
+    return device   

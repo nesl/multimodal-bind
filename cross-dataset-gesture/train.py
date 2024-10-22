@@ -1,23 +1,32 @@
 from torch.utils.data import DataLoader
 
-from param.parse_args import parse_args
-from models.models import MMBind
+from param.parse_args import parse_option
+from models.models import GestureMultimodalEncoders
+from models.loss import init_loss
 from data.gesture_dataset import MultimodalDataset
 
-from train.train_engine import train_engine
+from train_utils.train_engine import train_engine
 from evaluation.eval_engine import eval_engine
 
 def train(opt):
-    model = MMBind()
-    dataset = MultimodalDataset(valid_actions=opt.valid_actions, valid_mods=opt.valid_mods)
-    dataloader = DataLoader(dataset, batch_size=opt.batch_size, shuffle=True)
+    model = GestureMultimodalEncoders(opt)
+    loss_func = init_loss(opt)
+    
+    model = model.cuda()
+    loss_func = loss_func.cuda()
+    
+    train_dataset = MultimodalDataset(opt)
+    val_dataset = MultimodalDataset(opt, mode="valid")
+    
+    train_dataloader = DataLoader(train_dataset, batch_size=opt.batch_size, shuffle=True)
+    val_dataloader = DataLoader(val_dataset, batch_size=opt.batch_size, shuffle=False)
     
     if opt.stage == "train":
-        train_engine(opt, model, dataloader)
+        train_engine(opt, model, loss_func, train_dataloader, val_dataloader)
     else:
-        eval_engine(opt, model, dataloader)
+        eval_engine(opt, model, loss_func, train_dataloader, val_dataloader)
 
 if __name__ == '__main__':
-    opt = parse_args()
+    opt = parse_option()
     train(opt)
     
