@@ -36,17 +36,12 @@ class SkeletonEncoder(nn.Module):
             nn.BatchNorm3d(16),
             nn.ReLU(inplace=True),
         )
-        self.gru = nn.GRU(324, 120, 2, batch_first=True)
 
     def forward(self, x):
         b, t, c = x.size()
         x = x.view(b, t, c // 3, 3)
         x = x.unsqueeze(1)
-        
-        # print(x.size())
         x = self.features(x)
-        # x = x.view(x.size(0), 16, -1)
-        # x, _ = self.gru(x)
         x = x.reshape(x.size(0), -1)
         return x
 

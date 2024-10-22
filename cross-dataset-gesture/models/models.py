@@ -8,10 +8,6 @@ import utils.log as log
 mod_encoder_registry = {"skeleton": SkeletonEncoder, "stereo_ir": StereoEncoder, "depth": DepthEncoder}
 mod_decoder_registry = {"skeleton": SkeletonDecoder, "stereo_ir": StereoDecoder, "depth": DepthDecoder}
 
-# mod_encoder_registry = {"skeleton": SkeletonEncoder}
-# mod_encoder_registry = {"stereo_ir": StereoEncoder}
-# mod_encoder_registry = {"stereo_ir": StereoEncoder, "depth": DepthEncoder}
-
 dims =  {
     "skeleton": 5184,
     "stereo_ir": 1568,
@@ -19,16 +15,29 @@ dims =  {
 }
 
 
+def init_model(opt):
+    if opt.stage == "eval":
+        return GestureMultimodalEncoders(opt)
+    else:
+        if opt.exp_type == "mmbind":
+            if opt.exp_tag == "unimod":
+                return UnimodalAutoencoders(opt)
+            else:
+                raise NotImplementedError
+        else:
+            raise NotImplementedError
+
 class UnimodalAutoencoders(nn.Module):
-    def __init__(self, mod):
+    def __init__(self, opt):
         super(UnimodalAutoencoders, self).__init__()
-        mod = self.get_mod()
-        self.encoder = mod_encoder_registry[mod]()
-        self.decoder = mod_decoder_registry[mod]()
-        raise NotImplementedError
+        self.mod = opt.modality
+        self.encoder = mod_encoder_registry[self.mod]()
+        self.decoder = mod_decoder_registry[self.mod]()
 
     def forward(self, batched_data):
-        raise NotImplementedError
+        mod_embedding = self.encoder(batched_data[self.mod])
+        reconstructed = self.decoder(mod_embedding)
+        return reconstructed
 
 
 class GestureMultimodalEncoders(nn.Module):
