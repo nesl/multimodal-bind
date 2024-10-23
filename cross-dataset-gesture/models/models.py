@@ -16,6 +16,20 @@ dims = {"skeleton": 5184, "stereo_ir": 1568, "depth": 1568}
 def init_model(opt):
     if opt.stage == "eval":
         model = GestureMultimodalEncoders(opt)
+        if opt.exp_type == "mmbind":
+            # load model weights
+            model_weights_path = f"./weights/mmbind/contrastive_{opt.load_pretrain}_{opt.modality}_{opt.seed}_{opt.dataset_split}_1.0/models/lr_0.0005_decay_0.001_bsz_64/last.pth"
+            assert os.path.exists(model_weights_path), f"Model weights not found at {model_weights_path}"
+            log.logprint(f"Loading model weights from {model_weights_path}")
+            pretrained_model_weights = torch.load(model_weights_path)['model']
+            model_weights = {}
+            for k, v in pretrained_model_weights.items():
+                if "encoders" in k and k in model.state_dict():
+                    model_weights[k] = v
+
+            model_dict = model.state_dict()
+            model_dict.update(model_weights)
+            model.load_state_dict(model_dict)
     else:
         if opt.exp_type == "mmbind":
             if opt.exp_tag == "unimod":

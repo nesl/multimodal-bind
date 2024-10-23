@@ -78,7 +78,7 @@ def parse_option():
     parser.add_argument('--gpu', type=int, default=-1)
 
     # modality setting
-    parser.add_argument('--modality', type=str, default="acc")
+    parser.add_argument('--modality', type=str, default="skeleton")
 
     parser.add_argument('--dataset_split', type=str, default="random_split")
 

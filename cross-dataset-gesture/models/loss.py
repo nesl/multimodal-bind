@@ -2,6 +2,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+import utils.log as log
+
 
 class ConFusionLoss(nn.Module):
     """Supervised Contrastive Learning: https://arxiv.org/pdf/2004.11362.pdf.
@@ -99,6 +101,7 @@ def init_mmbind_loss(opt):
 
 def init_loss(opt):
     if opt.stage == "eval":
+        log.logprint("Initializing Cross Entropy Loss for classification")
         return nn.CrossEntropyLoss().cuda()
     else:
         if opt.exp_type == "mmbind":

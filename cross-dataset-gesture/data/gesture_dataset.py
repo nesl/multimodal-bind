@@ -7,7 +7,8 @@ import utils.log as log
 
 def init_dataset(opt, mode="train"):
     opt.full_modalities = ["skeleton", "stereo_ir", "depth"]
-    if opt.stage == "eval":
+    if opt.stage == "eval" or opt.exp_tag == "eval":
+        opt.dataset = "Briareo"
         return MultimodalDataset(opt, mode)
     else:
         if opt.exp_type == "mmbind":
