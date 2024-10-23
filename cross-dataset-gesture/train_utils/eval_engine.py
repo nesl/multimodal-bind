@@ -22,7 +22,7 @@ def eval_loop(opt, epoch, model, loss_func, dataloader, optimizer):
     label_list = []
     pred_list = []
     
-    for idx, (data, labels) in tqdm(enumerate(dataloader), total=len(dataloader)):
+    for idx, (data, labels, file_id) in tqdm(enumerate(dataloader), total=len(dataloader)):
         data_time.update(time.time() - end)
 
         # move to device
@@ -66,7 +66,7 @@ def validate(opt, val_loader, model, criterion):
     pred_list = []
 
     with torch.no_grad():
-        for idx, (data, labels) in tqdm(enumerate(val_loader), total=len(val_loader)):
+        for idx, (data, labels, file_id) in tqdm(enumerate(val_loader), total=len(val_loader)):
 
             # move to device
             for mod in data:

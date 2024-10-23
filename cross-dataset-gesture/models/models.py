@@ -1,5 +1,7 @@
+import os
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from models.mod_encoders import SkeletonEncoder, StereoEncoder, DepthEncoder
 from models.mod_decoders import SkeletonDecoder, StereoDecoder, DepthDecoder
 
@@ -8,24 +10,32 @@ import utils.log as log
 mod_encoder_registry = {"skeleton": SkeletonEncoder, "stereo_ir": StereoEncoder, "depth": DepthEncoder}
 mod_decoder_registry = {"skeleton": SkeletonDecoder, "stereo_ir": StereoDecoder, "depth": DepthDecoder}
 
-dims =  {
-    "skeleton": 5184,
-    "stereo_ir": 1568,
-    "depth": 1568
-}
+dims = {"skeleton": 5184, "stereo_ir": 1568, "depth": 1568}
 
 
 def init_model(opt):
     if opt.stage == "eval":
-        return GestureMultimodalEncoders(opt)
+        model = GestureMultimodalEncoders(opt)
     else:
         if opt.exp_type == "mmbind":
             if opt.exp_tag == "unimod":
-                return UnimodalAutoencoders(opt)
-            else:
-                raise NotImplementedError
+                model = UnimodalAutoencoders(opt)
+            elif opt.exp_tag == "pair":
+                model = UnimodalAutoencoders(opt)
+                # load model weights
+                model_weights_path = f"./weights/{opt.exp_type}/unimod_{opt.load_pretrain}_{opt.modality}_{opt.seed}_{opt.dataset_split}_{opt.label_ratio}/models/lr_0.0005_decay_0.001_bsz_{opt.batch_size}/best.pth"
+                log.logprint(f"Loading model weights from {model_weights_path}")
+                assert os.path.exists(model_weights_path), f"Model weights not found at {model_weights_path}"
+
+                model_weights = torch.load(model_weights_path)
+                model.load_state_dict(model_weights["model"])
+            elif opt.exp_tag == "contrastive":
+                model = GestureMultimodalEncoders(opt)
         else:
             raise NotImplementedError
+    model = model.cuda()
+    return model
+
 
 class UnimodalAutoencoders(nn.Module):
     def __init__(self, opt):
@@ -37,7 +47,7 @@ class UnimodalAutoencoders(nn.Module):
     def forward(self, batched_data):
         mod_embedding = self.encoder(batched_data[self.mod])
         reconstructed = self.decoder(mod_embedding)
-        return reconstructed
+        return mod_embedding, reconstructed
 
 
 class GestureMultimodalEncoders(nn.Module):
@@ -51,9 +61,9 @@ class GestureMultimodalEncoders(nn.Module):
         num_class = opt.num_class
 
         self.encoders = nn.ModuleDict({mod: mod_encoder_registry[mod]() for mod in modalities})
-        
-        total_dim = sum([dims[mod]for mod in modalities])
-        
+
+        total_dim = sum([dims[mod] for mod in modalities])
+
         self.classifier = nn.Sequential(
             nn.Linear(total_dim, 1280),
             nn.BatchNorm1d(1280),
@@ -63,8 +73,19 @@ class GestureMultimodalEncoders(nn.Module):
             nn.ReLU(inplace=True),
             nn.Linear(128, num_class),
         )
-        
-        self.decode = True
+
+        if opt.stage == "eval":
+            self.decode = True
+        else:
+            self.decode = False
+            self.mod_projector_head = nn.ModuleDict()
+            for mod in modalities:
+                self.mod_projector_head[mod] = nn.Sequential(
+                    nn.Linear(dims[mod], 1280),
+                    nn.BatchNorm1d(1280),
+                    nn.ReLU(inplace=True),
+                    nn.Linear(1280, 128),
+                )
 
     def forward(self, batched_data):
         mod_embeddings = []
@@ -74,12 +95,15 @@ class GestureMultimodalEncoders(nn.Module):
             mod_embedding = self.encoders[mod](batched_data[mod])
             mod_embeddings.append(mod_embedding)
 
-        mod_embeddings = torch.cat(mod_embeddings, dim=1)
-        
-        
         if self.decode:
+            mod_embeddings = torch.cat(mod_embeddings, dim=1)
             logits = self.classifier(mod_embeddings)
             return logits
-        
-        return mod_embeddings
-    
+
+        projected_embeddings = []
+        for i, mod in enumerate(batched_data):
+            if mod not in self.encoders:
+                continue
+            projected_embeddings.append(F.normalize(self.mod_projector_head[mod](mod_embeddings[i]), dim=1))
+
+        return projected_embeddings

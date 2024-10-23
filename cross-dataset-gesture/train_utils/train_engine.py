@@ -5,33 +5,32 @@ import time
 from tqdm import tqdm
 
 import utils.log as log
-from utils.evaluation import AverageMeter, accuracy, adjust_learning_rate, save_model
-from sklearn.metrics import f1_score
-
-def calc_loss(opt, model, data, labels, loss_func):
-    if opt.exp_type == "mmbind":
-        if opt.exp_tag == "unimod":
-            mod = opt.modality
-            pred = model(data)
-            gt = data[mod]
-            return loss_func(pred, gt)
-        else:
-            raise NotImplementedError
-    else:
-        raise NotImplementedError
+from utils.evaluation import AverageMeter, adjust_learning_rate, save_model
+from train_utils.calc_loss import calc_loss
             
             
-def val_loop(opt, epoch, model, loss_func, dataloader, optimizer):
+def val_loop(opt, epoch, model, loss_func, dataloader, optimizer, return_features=False):
     model.eval()
     losses = AverageMeter()
+    all_features = []
+    all_labels = []
+    all_ids = []
     with torch.no_grad():    
-        for idx, (data, labels) in tqdm(enumerate(dataloader), total=len(dataloader)):            
+        for idx, (data, labels, file_id) in tqdm(enumerate(dataloader), total=len(dataloader)):            
             for mod in data:
                 data[mod] = data[mod].cuda()
             labels = labels.cuda()
-            loss = calc_loss(opt, model, data, labels, loss_func)
+            embedding, loss = calc_loss(opt, model, data, labels, loss_func)
+            if return_features:
+                all_features.append(embedding.cpu())
+                all_labels.append(labels.cpu())
+                all_ids.append(file_id)
             losses.update(loss.item(), labels.shape[0])
-    return losses.avg
+    
+    if return_features:
+        return all_features, all_labels, all_ids
+    else:
+        return losses.avg
 
 def train_loop(opt, epoch, model, loss_func, dataloader, optimizer):
     model.train()
@@ -39,13 +38,13 @@ def train_loop(opt, epoch, model, loss_func, dataloader, optimizer):
     data_time = AverageMeter()
     losses = AverageMeter()
     end = time.time()
-    for idx, (data, labels) in tqdm(enumerate(dataloader), total=len(dataloader)):
+    for idx, (data, labels, file_id) in tqdm(enumerate(dataloader), total=len(dataloader)):
         data_time.update(time.time() - end)
         for mod in data:
             data[mod] = data[mod].cuda()
         labels = labels.cuda()
         
-        loss = calc_loss(opt, model, data, labels, loss_func)
+        _, loss = calc_loss(opt, model, data, labels, loss_func)
         losses.update(loss.item(), labels.shape[0])
         
         optimizer.zero_grad()
@@ -67,14 +66,20 @@ def train_engine(opt, model, loss_func, train_dataloader, val_dataloader):
         log.divide(f"Epoch {epoch + 1}/{opt.epochs}")
         adjust_learning_rate(opt, optimizer, epoch)
         train_loss = train_loop(opt, epoch, model, loss_func, train_dataloader, optimizer)
+        log.logprint(f"Training Loss: {train_loss}")
         record_loss[epoch] = train_loss
         
-        if (epoch) % opt.save_freq == 0:
+        if (epoch) % 10 == 0 and val_dataloader is not None:
             val_loss = val_loop(opt, epoch, model, loss_func, val_dataloader, optimizer)
             if val_loss < best_val_loss:
                 best_val_loss = val_loss
                 save_file = os.path.join(opt.save_folder, "best.pth")
                 save_model(model, optimizer, opt, opt.epochs, save_file)
+            log.logprint(f"Validation Loss: {val_loss}")
+        if epoch % 10 == 0:
+            save_file = os.path.join(opt.save_folder, "last.pth")
+            save_model(model, optimizer, opt, epoch, save_file)
+        np.savetxt(os.path.join(opt.save_folder, "loss.txt"), record_loss)
     
     save_file = os.path.join(opt.save_folder, "last.pth")
     save_model(model, optimizer, opt, opt.epochs, save_file)

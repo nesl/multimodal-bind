@@ -1,28 +1,24 @@
-from torch.utils.data import DataLoader
-
 from param.parse_args import parse_option
 from models.models import init_model
 from models.loss import init_loss
-from data.gesture_dataset import init_dataset
+from data.gesture_dataset import init_dataloader
 
 from train_utils.train_engine import train_engine
-from evaluation.eval_engine import eval_engine
+from train_utils.pair_engine import pair_engine
+from train_utils.eval_engine import eval_engine
 
 def train(opt):
     model = init_model(opt)
     loss_func = init_loss(opt)
     
-    model = model.cuda()
-    loss_func = loss_func.cuda()
-    
-    train_dataset = init_dataset(opt)
-    val_dataset = init_dataset(opt, mode="valid")
-    
-    train_dataloader = DataLoader(train_dataset, batch_size=opt.batch_size, shuffle=True)
-    val_dataloader = DataLoader(val_dataset, batch_size=opt.batch_size, shuffle=False)
-    
+    train_dataloader = init_dataloader(opt, mode="train")
+    val_dataloader = init_dataloader(opt, mode="valid")
+
     if opt.stage == "train":
-        train_engine(opt, model, loss_func, train_dataloader, val_dataloader)
+        if opt.exp_tag == "pair":
+            pair_engine(opt, model, loss_func, train_dataloader)
+        else:
+            train_engine(opt, model, loss_func, train_dataloader, val_dataloader)
     else:
         eval_engine(opt, model, loss_func, train_dataloader, val_dataloader)
 
