@@ -15,7 +15,7 @@ def train(opt):
     val_dataloader = init_dataloader(opt, mode="valid")
 
     if opt.stage == "train":
-        if opt.exp_tag == "pair":
+        if "pair" in opt.exp_tag:
             pair_engine(opt, model, loss_func, train_dataloader)
         else:
             train_engine(opt, model, loss_func, train_dataloader, val_dataloader)

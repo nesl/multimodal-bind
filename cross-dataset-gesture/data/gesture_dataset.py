@@ -20,9 +20,9 @@ def init_dataset(opt, mode="train"):
                 dataset_2 = MultimodalDataset(opt, mode)
                 log.logprint(f"{opt.exp_type} {opt.exp_tag} - Merging GR4DHCI and DHG datasets for {opt.modality}")
                 return ConcatDataset([dataset_1, dataset_2])
-            elif opt.exp_tag == "pair":
+            elif opt.exp_tag in {"pair", "label_pair"}:
                 opt.original_dataset = opt.dataset
-                
+
                 opt.dataset = "GR4DHCI"
                 opt.full_modalities = [opt.modality, "stereo_ir"]
                 dataset_1 = MultimodalDataset(opt, mode)
@@ -43,6 +43,12 @@ def init_dataset(opt, mode="train"):
                 prefix_GR4DHCI = f'./weights/{opt.exp_type}/GR4DHCI_pair_{opt.load_pretrain}_skeleton_{opt.seed}_{opt.dataset_split}_{opt.label_ratio}/paired_data_GR4DHCI_stereo_ir/'
                 dataset_2 = MultimodalDataset(opt, mode, indice_prefix=prefix_GR4DHCI, indice_file=os.path.join(prefix_GR4DHCI, "train.txt"))
                 return dataset_1, dataset_2
+            elif opt.exp_tag == "label_contrastive": 
+                if mode == "valid":
+                    return None
+                prefix_label = f'./weights/{opt.exp_type}/label_pair_{opt.load_pretrain}_skeleton_{opt.seed}_{opt.dataset_split}_{opt.label_ratio}/label_paired_data/'
+                dataset_1 = MultimodalDataset(opt, mode, indice_prefix=prefix_label)
+                return dataset_1
             else:
                 raise NotImplementedError
 
@@ -50,7 +56,7 @@ def init_dataloader(opt, mode="train"):
     datasets = init_dataset(opt, mode)
     if datasets is None:
         return None
-    if opt.exp_tag == "pair":
+    if opt.exp_tag in {"pair", "label_pair"}:
         dataset_1, dataset_2 = datasets
         val_datasets1, val_datasets2 = init_dataset(opt, "valid")
         dataset_1 = ConcatDataset([dataset_1, val_datasets1])
@@ -60,6 +66,9 @@ def init_dataloader(opt, mode="train"):
         dataset_1, dataset_2 = datasets # GR4DHCI binded, DHG binded
         dataset = ConcatDataset([dataset_1, dataset_2])
         return DataLoader(dataset, batch_size=opt.batch_size, shuffle=mode=="train")
+        return DataLoader(dataset, batch_size=opt.batch_size, shuffle=mode=="train")
+        
+        return DataLoader(dataset, batch_size=opt.batch_size, shuffle=mode=="train")        
         
     else:
         return DataLoader(datasets, batch_size=opt.batch_size, shuffle=mode=="train")
@@ -129,6 +138,13 @@ class MultimodalDataset():
             self.indice_prefix = os.path.join(opt.processed_data_path, self.dataset)
         else:
             self.indice_prefix = indice_prefix
+        
+        if self.opt.exp_tag == "label_contrastive":
+            self.skeleton_data = np.load(os.path.join(self.indice_prefix, "skeleton.npy"))
+            self.stereo_ir_data = np.load(os.path.join(self.indice_prefix, "stereo_ir.npy"))
+            self.depth_data = np.load(os.path.join(self.indice_prefix, "depth.npy"))
+            print(self.skeleton_data.shape, self.stereo_ir_data.shape, self.depth_data.shape)
+            
         self.labels = np.load(os.path.join(self.indice_prefix, "label.npy"))
         
         if mode == 'train' and opt.label_ratio < 1.0:
@@ -140,16 +156,18 @@ class MultimodalDataset():
         log.logprint(f"Loading {mode} dataset from {self.indice_file} with {len(self.indices)} samples for {self.modalities}")
     
     def __len__(self):
+        if self.opt.exp_tag == "label_contrastive":
+            return self.skeleton_data.shape[0]
         return len(self.indices)
     
     def __transform__(self, data):
         if self.opt.exp_tag != "contrastive":
             # Paired data are already normalized
             data = self.__normalize__(data)
-        for mod in self.modalities:
-            if mod == "stereo_ir" or mod == "depth":
-                # add transform to resize from 30 * 171 * 224 to 30 * 112 * 112
-                data[mod] = torch.nn.functional.interpolate(data[mod].unsqueeze(0), size=(112, 112), mode="bilinear", align_corners=False).squeeze(0)
+            for mod in self.modalities:
+                if mod == "stereo_ir" or mod == "depth":
+                    # add transform to resize from 30 * 171 * 224 to 30 * 112 * 112
+                    data[mod] = torch.nn.functional.interpolate(data[mod].unsqueeze(0), size=(112, 112), mode="bilinear", align_corners=False).squeeze(0)
         
         return data
         
@@ -158,7 +176,21 @@ class MultimodalDataset():
             data[mod] = normalize_dataset_mod(data[mod], mod, self.dataset)
         return data
 
+    def __getitem_label__(self, file_id):
+        label = self.labels[file_id]
+        data = {
+            "skeleton": torch.from_numpy(self.skeleton_data[file_id]),
+            "stereo_ir": torch.from_numpy(self.stereo_ir_data[file_id]),
+            "depth": torch.from_numpy(self.depth_data[file_id])
+        }
+        if isinstance(label, str):
+            label = int(label)
+        return data, label, file_id
     def __getitem__(self, idx):
+        
+        if self.opt.exp_tag == "label_contrastive":
+            return self.__getitem_label__(idx)
+
         file_index = self.indices[idx]
         file_id = int(file_index)
         data = {}

@@ -101,8 +101,22 @@ def validate(opt, val_loader, model, criterion):
 def eval_engine(opt, model, loss_func, train_dataloader, val_dataloader):
     best_acc = 0
     best_f1 = 0
-
-    optimizer = torch.optim.Adam(model.parameters(), lr=opt.learning_rate, weight_decay=opt.weight_decay)
+    
+    parameters = model.parameters()
+    if opt.exp_type == "mmbind" and False:
+        update_parameters = []
+        for name, param in model.named_parameters():
+            if "encoders" not in name:
+                update_parameters.append(param)
+                param.requires_grad = True
+                log.logprint(f"Updating {name}")
+            else:
+                param.requires_grad = False
+                
+        parameters = update_parameters
+    else:
+        log.logprint("Updating all parameters")
+    optimizer = torch.optim.Adam(parameters, lr=opt.learning_rate, weight_decay=opt.weight_decay)
     record_loss = np.zeros(opt.epochs)
     record_acc = np.zeros(opt.epochs)
     record_f1 = np.zeros(opt.epochs)

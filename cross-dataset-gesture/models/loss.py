@@ -91,9 +91,9 @@ class ConFusionLoss(nn.Module):
 def init_mmbind_loss(opt):
     if opt.exp_tag == "unimod":
         return nn.MSELoss().cuda()
-    elif opt.exp_tag == "pair":
+    elif opt.exp_tag in {"pair", "label_pair"}:
         return None
-    elif opt.exp_tag == "contrastive":
+    elif opt.exp_tag in {"contrastive", "label_contrastive"}:
         return ConFusionLoss().cuda()
     else:
         raise NotImplementedError

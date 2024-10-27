@@ -22,7 +22,7 @@ def plot_similarity_matrix(similarity_matrix, save_path, reference_dataset, sear
     plt.close()
     
     
-def pair_engine(opt, model, loss_func, train_dataloader):
+def sensor_pair_engine(opt, model, loss_func, train_dataloader):
     
     # train_dataloader_1 === GR4DHCI (skeleton, stereo_ir)
     # train_dataloader_2 === DHG (skeleton, depth)
@@ -127,3 +127,120 @@ def pair_engine(opt, model, loss_func, train_dataloader):
     
     np.savetxt(save_paired_path + 'train.txt', np.arange(paired_data_length), fmt='%s')
     np.savetxt(save_paired_path + 'valid.txt', np.arange(paired_data_length), fmt='%s')
+
+def label_pair_engine(opt, model, loss_func, train_dataloader):
+    # train_dataloader_1 === GR4DHCI (skeleton, stereo_ir)
+    # train_dataloader_2 === DHG (skeleton, depth)
+    train_dataloader_1, train_dataloader_2 = train_dataloader
+    def get_data_label(mod1, mod2, loader):
+        mod_1_data = []
+        mod_2_data = []
+        all_labels = []
+        log.logprint(f"Extracting {mod1} and {mod2} data")
+        for data, labels, file_id in tqdm(loader):
+            mod_1_data.append(data[mod1])
+            mod_2_data.append(data[mod2])
+            all_labels.append(labels)
+        mod_1_data = torch.cat(mod_1_data, dim=0)
+        mod_2_data = torch.cat(mod_2_data, dim=0)
+        all_labels = torch.cat(all_labels, dim=0)
+        all_labels = all_labels.numpy().flatten()
+        print(mod_1_data.shape, mod_2_data.shape, all_labels.shape)
+        return mod_1_data, mod_2_data, all_labels
+    
+    data_path = opt.processed_data_path.split("/")[-1]
+    label_similarity_matrix = np.load(os.path.join(data_path, "label_similarity_matrix.npy")) # 8 * 14
+    print(f"Loading label similarity matrix from {os.path.join(data_path, 'label_similarity_matrix.npy')}")
+    log.logprint(f"Label Similarity Matrix shape: {label_similarity_matrix.shape}")
+
+    skeleton_data_1, stereo_ir_data_1, labels_1 = get_data_label("skeleton", "stereo_ir", train_dataloader_1)
+    skeleton_data_2, depth_data_2, labels_2 = get_data_label("skeleton", "depth", train_dataloader_2)
+    
+    log.logprint(f"GR4DHCI Skeleton shape: {skeleton_data_1[0].shape}")
+    log.logprint(f"GR4DHCI labels: {labels_1.shape}")
+    
+    log.logprint(f"DHG Skeleton shape: {skeleton_data_2[0].shape}")
+    log.logprint(f"DHG labels: {labels_2.shape}")
+    
+    labels_1 = [x for x in labels_1] # GR4DHCI labels start from 1 instead of zero
+    labels_2 = [x - 1 for x in labels_2] # DHG labels start from 1 instead of zero
+    labels_1 = np.array(labels_1)
+    labels_2 = np.array(labels_2)
+    
+    # sanity check
+    labels_set_1 = set(labels_1)
+    num_class_1 = len(labels_set_1)
+    labels_set_2 = set(labels_2)
+    num_class_2 = len(labels_set_2)
+    
+    log.logprint(f"Start Pairing the data from GR4DHCI {label_similarity_matrix.shape[0]} classes and DHG {label_similarity_matrix.shape[1]} classes")
+    
+    print(min(labels_1), max(labels_1), min(labels_2), max(labels_2))
+    log.logprint(f"Number of classes in GR4DHCI: {num_class_1}")
+    log.logprint(f"Number of classes in DHG: {num_class_2}")
+    
+    index_A = []
+    for i in range(num_class_1):
+        index_A.append([j for j in range(len(labels_1)) if labels_1[j] == i])
+    index_B = []
+    for i in range(num_class_2):
+        index_B.append([j for j in range(len(labels_2)) if labels_2[j] == i])
+    
+    skeleton_data = []
+    stereo_ir_data = []
+    depth_data = []
+    paired_labels = []
+    
+    # Pairing the data for GR4DHCI first
+    for class_id in tqdm(range(num_class_1)):
+        for sample_id in index_A[class_id]:
+            temp_similarity_vector = label_similarity_matrix[class_id].reshape(-1) # find the similartiy score for class from GR4DHCI to DHG
+            search_class_id = np.argmax(temp_similarity_vector) # find the most similar class from DHG
+            
+            paired_labels.append((class_id, search_class_id)) # save the paired label
+            skeleton_data.append(skeleton_data_1[sample_id]) 
+            stereo_ir_data.append(stereo_ir_data_1[sample_id])
+            
+            # randomly select the data from DHG of class search_class_id
+            select_feature_index = np.random.choice(index_B[search_class_id])
+            depth_data.append(depth_data_2[select_feature_index])
+    
+    for class_id in tqdm(range(num_class_2)):
+        for sample_id in index_B[class_id]:
+            temp_similarity_vector = label_similarity_matrix[:, class_id].reshape(-1)
+            search_class_id = np.argmax(temp_similarity_vector)
+            
+            paired_labels.append((search_class_id, class_id))
+            skeleton_data.append(skeleton_data_2[sample_id])
+            depth_data.append(depth_data_2[sample_id])
+            
+            select_feature_index = np.random.choice(index_A[search_class_id])
+            stereo_ir_data.append(stereo_ir_data_1[select_feature_index])
+    
+    skeleton_data = np.stack(skeleton_data)
+    stereo_ir_data = np.stack(stereo_ir_data)
+    depth_data = np.stack(depth_data)
+    paired_labels = np.array(paired_labels)
+    
+    log.logprint(f"{skeleton_data.shape}, {stereo_ir_data.shape}, {depth_data.shape}, {paired_labels.shape}")
+
+    save_paired_path = os.path.join(opt.save_path, "label_paired_data")
+    if not os.path.exists(save_paired_path):
+        os.makedirs(os.path.join(save_paired_path))
+
+    
+    log.logprint(f"Saving paired data at {save_paired_path}")
+    np.save(os.path.join(save_paired_path, "skeleton.npy"), skeleton_data)
+    np.save(os.path.join(save_paired_path, "stereo_ir.npy"), stereo_ir_data)
+    np.save(os.path.join(save_paired_path, "depth.npy"), depth_data)
+    np.save(os.path.join(save_paired_path, "label.npy"), paired_labels)
+    
+            
+
+def pair_engine(opt, model, loss_func, train_dataloader):
+    if "label" in opt.exp_tag:
+        log.logprint("Performing label pair engine")
+        label_pair_engine(opt, model, loss_func, train_dataloader)
+    else:
+        log.logprint("Performing sensor pair engine")
+        sensor_pair_engine(opt, model, loss_func, train_dataloader)

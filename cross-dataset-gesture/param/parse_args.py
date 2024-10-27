@@ -10,7 +10,7 @@ import torch
 import utils.log as log
 
 def set_auto(opt):
-    if opt.exp_type in {"lowerbound"} or opt.exp_tag in {"eval"}:
+    if opt.exp_type in {"lowerbound"} or opt.exp_tag in {"eval", "label_eval"}:
         opt.stage = "eval"
     else:
         opt.stage = "train"
@@ -123,7 +123,7 @@ def parse_option():
 
     opt.save_path = f'./weights/{exp_type}/{opt.dataset}_{exp_tag}_{opt.load_pretrain}_{opt.modality}_{opt.seed}_{opt.dataset_split}_{opt.label_ratio}/'
     
-    if opt.exp_tag in {"unimod", "contrastive"}:
+    if opt.exp_tag in {"unimod", "contrastive", "label_pair", "label_contrastive"}:
         opt.save_path = f'./weights/{exp_type}/{exp_tag}_{opt.load_pretrain}_{opt.modality}_{opt.seed}_{opt.dataset_split}_{opt.label_ratio}/'
     
     print(f"TODO: Add different save path for mmbind pairs")

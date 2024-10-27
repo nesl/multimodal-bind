@@ -2,15 +2,22 @@ import os
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from models.mod_encoders import SkeletonEncoder, StereoEncoder, DepthEncoder
-from models.mod_decoders import SkeletonDecoder, StereoDecoder, DepthDecoder
+from models.mod_encoders import SkeletonEncoder, SkeletonTransformerEncoder, StereoEncoder, DepthEncoder
+from models.mod_decoders import SkeletonDecoder, SkeletonTransformerDecoder,StereoDecoder, DepthDecoder
 
 import utils.log as log
 
-mod_encoder_registry = {"skeleton": SkeletonEncoder, "stereo_ir": StereoEncoder, "depth": DepthEncoder}
-mod_decoder_registry = {"skeleton": SkeletonDecoder, "stereo_ir": StereoDecoder, "depth": DepthDecoder}
+# mod_encoder_registry = {"skeleton": SkeletonEncoder, "stereo_ir": StereoEncoder, "depth": DepthEncoder}
+# mod_decoder_registry = {"skeleton": SkeletonDecoder, "stereo_ir": StereoDecoder, "depth": DepthDecoder}
 
-dims = {"skeleton": 5184, "stereo_ir": 1568, "depth": 1568}
+mod_encoder_registry = {"skeleton": SkeletonTransformerEncoder, "stereo_ir": StereoEncoder, "depth": DepthEncoder}
+mod_decoder_registry = {"skeleton": SkeletonTransformerDecoder, "stereo_ir": StereoDecoder, "depth": DepthDecoder}
+
+# mod_encoder_registry = {"skeleton": SkeletonEncoder}
+# mod_decoder_registry = {"skeleton": SkeletonDecoder}
+
+# dims = {"skeleton": 5184, "stereo_ir": 1568, "depth": 1568}
+dims = {"skeleton": 1920, "stereo_ir": 1568, "depth": 1568}
 
 
 def init_model(opt):
@@ -18,7 +25,10 @@ def init_model(opt):
         model = GestureMultimodalEncoders(opt)
         if opt.exp_type == "mmbind":
             # load model weights
-            model_weights_path = f"./weights/mmbind/contrastive_{opt.load_pretrain}_{opt.modality}_{opt.seed}_{opt.dataset_split}_1.0/models/lr_0.0005_decay_0.001_bsz_64/last.pth"
+            if opt.exp_tag == "eval":
+                model_weights_path = f"./weights/mmbind/contrastive_{opt.load_pretrain}_{opt.modality}_{opt.seed}_{opt.dataset_split}_1.0/models/lr_0.0005_decay_0.001_bsz_64/last.pth"
+            elif opt.exp_tag == "label_eval":
+                model_weights_path = f"./weights/mmbind/label_contrastive_{opt.load_pretrain}_{opt.modality}_{opt.seed}_{opt.dataset_split}_1.0/models/lr_0.0005_decay_0.001_bsz_64/last.pth"
             assert os.path.exists(model_weights_path), f"Model weights not found at {model_weights_path}"
             log.logprint(f"Loading model weights from {model_weights_path}")
             pretrained_model_weights = torch.load(model_weights_path)['model']
@@ -34,6 +44,8 @@ def init_model(opt):
         if opt.exp_type == "mmbind":
             if opt.exp_tag == "unimod":
                 model = UnimodalAutoencoders(opt)
+            elif opt.exp_tag == "label_pair":
+                return None
             elif opt.exp_tag == "pair":
                 model = UnimodalAutoencoders(opt)
                 # load model weights
@@ -43,7 +55,7 @@ def init_model(opt):
 
                 model_weights = torch.load(model_weights_path)
                 model.load_state_dict(model_weights["model"])
-            elif opt.exp_tag == "contrastive":
+            elif opt.exp_tag in {"contrastive", "label_contrastive"}:
                 model = GestureMultimodalEncoders(opt)
         else:
             raise NotImplementedError

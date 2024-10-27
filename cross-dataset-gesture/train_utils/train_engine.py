@@ -65,6 +65,7 @@ def train_engine(opt, model, loss_func, train_dataloader, val_dataloader):
     for epoch in range(0, opt.epochs):
         log.divide(f"Epoch {epoch + 1}/{opt.epochs}")
         adjust_learning_rate(opt, optimizer, epoch)
+        
         train_loss = train_loop(opt, epoch, model, loss_func, train_dataloader, optimizer)
         log.logprint(f"Training Loss: {train_loss}")
         record_loss[epoch] = train_loss
