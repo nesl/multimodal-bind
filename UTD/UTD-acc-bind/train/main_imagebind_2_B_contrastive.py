@@ -61,7 +61,7 @@ def parse_option():
 
     # model dataset
     parser.add_argument('--model', type=str, default='MyUTDmodel')
-    parser.add_argument('--dataset', type=str, default='train_AB',
+    parser.add_argument('--dataset', type=str, default='train_B',
                         choices=['train_A', 'train_B', 'train_AB'], help='dataset')
     parser.add_argument('--num_class', type=int, default=27,
                         help='num_class')
@@ -83,7 +83,8 @@ def parse_option():
     opt = parser.parse_args()
 
     # set the path according to the environment
-    opt.save_path = "./save_baseline5/save_{}_dual_contrastive_zero_{}/".format(opt.dataset, opt.load_pretrain)
+    opt.save_path = "./save_imagebind/save_{}_dual_contrastive_zero_{}/".format(opt.dataset, opt.load_pretrain)
+    
     opt.model_path = opt.save_path + 'models'
     opt.tb_path = opt.save_path + 'tensorboard'
     opt.result_path = opt.save_path + 'results/'
@@ -184,9 +185,16 @@ def set_model(opt):
         criterion = criterion.cuda()
         cudnn.benchmark = True
 
-    if opt.load_pretrain == "load_pretrain":
-        model.skeleton_encoder.load_state_dict(load_single_modal(opt, 'skeleton_encoder.'))
-        model.gyro_encoder.load_state_dict(load_single_modal(opt, 'gyro_encoder.'))
+    state_dict = torch.load('./save_imagebind/save_train_AB_acc_AE/models/single_train_AB_lr_0.001_decay_0.0001_bsz_128/last.pth')['model']
+    pruned_state_dict = {}
+    for key, val in state_dict.items():
+        if 'acc_encoder' in key:
+            pruned_state_dict[key.split('acc_encoder.')[-1]] = val
+
+    model.acc_encoder.load_state_dict(pruned_state_dict)    
+
+    for param in model.acc_encoder.parameters():
+        param.requires_grad = False
 
     return model, criterion
 
@@ -215,14 +223,13 @@ def train(train_loader, model, criterion, optimizer, epoch, opt):
         # warm-up learning rate
         # warmup_learning_rate(opt, epoch, idx, len(train_loader), optimizer)
 
-        acc_feature, skeleton_feature, gyro_feature = model(input_data1, input_data2, input_data3, mask)
+        acc_feat, skeleton_feat, gyro_feat = model(input_data1, input_data2, input_data3, mask)
         
         #print(mask.shape)
         #print(feature1.shape, mask.squeeze()[:, 0, :].shape)
         
-        combined_feature = skeleton_feature * mask.squeeze()[:, 1, :] + gyro_feature * mask.squeeze()[:, 2, :]
 
-        features = FeatureConstructor(acc_feature, combined_feature, 2)
+        features = FeatureConstructor(acc_feat, gyro_feat, 2)
 
         #features = FeatureConstructor(feature1, feature2, feature3, 2)
 

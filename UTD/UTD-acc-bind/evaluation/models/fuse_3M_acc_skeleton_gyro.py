@@ -78,7 +78,7 @@ class MyUTDmodel_3M(nn.Module):
             nn.Linear(128, num_classes),
             )
 
-    def forward(self, x1, x2, x3):
+    def forward(self, x1, x2, x3, mask = None):
 
         acc_output = self.acc_encoder(x1)
         skeleton_output = self.skeleton_encoder(x2)

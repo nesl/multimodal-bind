@@ -42,7 +42,7 @@ class MyUTDmodel_3M_contrastive(nn.Module):
             )
         
 
-    def forward(self, x1, x2, x3, mask):
+    def forward(self, x1, x2, x3, mask = None):
 
         acc_output = self.acc_encoder(x1)
         skeleton_output = self.skeleton_encoder(x2)
