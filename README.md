@@ -1,5 +1,5 @@
 # MMBind: Multimodal Learning with Incomplete Data
-This is a repo for SenSys 2024 submission: " MMBind: Unleashing the Potential of Distributed and Heterogeneous Data for Multimodal Learning in IoT ".
+This is a repo for SenSys 2025 paper: " MMBind: Unleashing the Potential of Distributed and Heterogeneous Data for Multimodal Learning in IoT ".
 
 # Requirements
 The program has been tested in the following environment: 
