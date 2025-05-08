@@ -170,10 +170,10 @@ def set_loader(opt):
     # Load original dataset A
     with open('../Configs/config_train_A_Contrastive.yaml', 'r') as handle:
         config_train = yaml.load(handle, Loader=yaml.FullLoader)
-    original_A, _ = make_dataset('../../MMFI_Dataset/', config_train)
+    original_A, _ = make_dataset('/mnt/ssd_8t/jason/MMFI_Dataset/', config_train)
     with open('../Configs/config_train_B_Contrastive.yaml', 'r') as handle:
         config_train = yaml.load(handle, Loader=yaml.FullLoader)
-    original_B, _ = make_dataset('../../MMFI_Dataset/', config_train)
+    original_B, _ = make_dataset('/mnt/ssd_8t/jason/MMFI_Dataset/', config_train)
     # We utilize different config files for paired contrastive with all modalities
     if opt.dataset == "train_all_paired_AB":
         print("train paired data:")

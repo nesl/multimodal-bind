@@ -132,73 +132,15 @@ def set_dataset(opt):
     print("train labeled data:")
     with open('../Configs/config_train_A.yaml', 'r') as handle:
             config_train = yaml.load(handle, Loader=yaml.FullLoader)
-            train_dataset_A, _ = make_dataset('../../MMFI_Dataset/', config_train)
+            train_dataset_A, _ = make_dataset('/mnt/ssd_8t/jason/MMFI_Dataset/', config_train)
     with open('../Configs/config_train_B.yaml', 'r') as handle:
             config_train = yaml.load(handle, Loader=yaml.FullLoader)
-            train_dataset_B, _ = make_dataset('../../MMFI_Dataset/', config_train)
+            train_dataset_B, _ = make_dataset('/mnt/ssd_8t/jason/MMFI_Dataset/', config_train)
 
    
 
     return train_dataset_A, train_dataset_B
 
-# def set_model(opt):
-
-#     model = WifiEncoder()
-#     # Use the skeletonAE() as a template to load weights in and then copy the weights
-#     model_template = WiFiAE()
-#     model_template.load_state_dict(torch.load('./save_mmbind/save_train_AB_skeleton_AE/models/single_train_AB_lr_0.001_decay_0.0001_bsz_64/last.pth')['model'])
-#     model = model_template.enc
-#     model = model.cuda()
-#     return model
-
-
-
-# def validate(val_loader, model, opt):
-#     """validation"""
-#     model.eval()
-
-#     batch_time = AverageMeter()
-
-#     confusion = np.zeros((opt.num_class, opt.num_class))
-#     features_list = []
-#     label_list = []
-#     idx_list = []
-
-#     with torch.no_grad():
-#         end = time.time()
-#         for idx, batched_data in enumerate(val_loader):
-#             # Labels in this case will be strings such as 'A01'
-#             labels = batched_data['action']
-
-
-#             bsz = len(labels)
-#             # batched_data contains the paths as well
-#             data_path = batched_data['data_path']
-#             # Get skeleton encoder features
-#             features = model(batched_data)
-#             features = torch.reshape(features, (bsz, -1))
-
-#             # calculate and store confusion matrix
-#             features_list.extend(features.cpu().numpy())
-#             idx_list.extend(data_path)
-#             label_list.extend(labels)
-
-
-#             # measure elapsed time
-#             batch_time.update(time.time() - end)
-#             end = time.time()
-
-
-#             if idx % opt.print_freq == 0:
-#                 print('Test: [{0}/{1}]\t'
-#                       'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'.format(
-#                        idx, len(val_loader), batch_time=batch_time))
-
-#     features_list = np.array(features_list)
-#     idx_list = np.array(idx_list) # Holds all the data paths
-#     label_list = np.array(label_list)
-
-#     return features_list, label_list, idx_list
 
 
 def main():

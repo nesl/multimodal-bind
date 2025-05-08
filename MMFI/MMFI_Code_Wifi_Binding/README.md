@@ -1,0 +1,2 @@
+In this folder, we investigate the impact of performing binding with the WiFi modality. 
+This highlights the importance of selecting the correct binding modality, as WiFi features are not descriptive enough to generate high quality data pairs.

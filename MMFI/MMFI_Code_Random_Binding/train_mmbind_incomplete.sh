@@ -1,8 +1,8 @@
 #!/bin/bash
 cd train
 python3 main_mmbind_1_wifi_autencoder.py --seed $1
-python3 main_mmbind_2_measure_similarity_wifi.py --seed $1 
-python3 main_mmbind_2_measure_similarity_wifi.py --seed $1 --reference_modality mmwave 
+python3 main_mmbind_2_measure_similarity_random.py --seed $1 
+python3 main_mmbind_2_measure_similarity_random.py --seed $1 --reference_modality mmwave 
 cd save_mmbind
 mkdir train_all_paired_AB
 cp -r train_depth_paired_AB/* train_all_paired_AB

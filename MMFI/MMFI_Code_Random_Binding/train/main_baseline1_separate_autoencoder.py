@@ -164,7 +164,7 @@ def set_loader(opt):
     with open(opt.train_path, 'r') as handle:
         config_train = yaml.load(handle, Loader=yaml.FullLoader)
 
-    train_dataset, _ = make_dataset('../../MMFI_Dataset/', config_train)
+    train_dataset, _ = make_dataset('/mnt/ssd_8t/jason/MMFI_Dataset/', config_train)
 
     train_loader = torch.utils.data.DataLoader(
         train_dataset, batch_size=opt.batch_size, num_workers=opt.num_workers,

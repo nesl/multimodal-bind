@@ -130,10 +130,10 @@ def set_loader(opt):
     print("train labeled data:")
     with open('../Configs/config_train_A.yaml', 'r') as handle:
             config_train = yaml.load(handle, Loader=yaml.FullLoader)
-            train_dataset_A, _ = make_dataset('../../MMFI_Dataset/', config_train)
+            train_dataset_A, _ = make_dataset('/mnt/ssd_8t/jason/MMFI_Dataset/', config_train)
     with open('../Configs/config_train_B.yaml', 'r') as handle:
             config_train = yaml.load(handle, Loader=yaml.FullLoader)
-            train_dataset_B, _ = make_dataset('../../MMFI_Dataset/', config_train)
+            train_dataset_B, _ = make_dataset('/mnt/ssd_8t/jason/MMFI_Dataset/', config_train)
 
     train_loader_A = torch.utils.data.DataLoader(
         train_dataset_A, batch_size=opt.batch_size, collate_fn=collate_fn_padd,

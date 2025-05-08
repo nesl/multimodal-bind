@@ -173,20 +173,20 @@ def set_loader(opt):
     if (opt.dataset == 'train_A'):
         with open('../Configs/config_train_A.yaml', 'r') as handle:
             config_train = yaml.load(handle, Loader=yaml.FullLoader)
-        train_dataset, _ = make_dataset('../../MMFI_Dataset/', config_train)
+        train_dataset, _ = make_dataset('/mnt/ssd_8t/jason/MMFI_Dataset/', config_train)
 
     elif (opt.dataset == 'train_B'):
         with open('../Configs/config_train_B.yaml', 'r') as handle:
             config_train = yaml.load(handle, Loader=yaml.FullLoader)
-        train_dataset, _ = make_dataset('../../MMFI_Dataset/', config_train)
+        train_dataset, _ = make_dataset('/mnt/ssd_8t/jason/MMFI_Dataset/', config_train)
 
     elif (opt.dataset == 'train_AB'):
         with open('../Configs/config_train_A.yaml', 'r') as handle:
             config_train = yaml.load(handle, Loader=yaml.FullLoader)
-        train_datasetA, _ = make_dataset('../../MMFI_Dataset/', config_train)
+        train_datasetA, _ = make_dataset('/mnt/ssd_8t/jason/MMFI_Dataset/', config_train)
         with open('../Configs/config_train_B.yaml', 'r') as handle:
             config_train = yaml.load(handle, Loader=yaml.FullLoader)
-        train_datasetB, _ = make_dataset('../../MMFI_Dataset/', config_train)
+        train_datasetB, _ = make_dataset('/mnt/ssd_8t/jason/MMFI_Dataset/', config_train)
         train_dataset = ConcatDataset([train_datasetA, train_datasetB])
     
     # Return single train loader

@@ -170,8 +170,8 @@ def set_loader(opt):
 
     # In shared_file.PickleDataset, make_dataset creates a Pytorch dataset
     # Call it twice to create train and val datasets, throw away the second element of tuple
-    train_dataset, _ = make_dataset('../../MMFI_Dataset/', config_train)
-    val_dataset, _ = make_dataset('../../MMFI_Dataset/', config_val)
+    train_dataset, _ = make_dataset('/mnt/ssd_8t/jason/MMFI_Dataset/', config_train)
+    val_dataset, _ = make_dataset('/mnt/ssd_8t/jason/MMFI_Dataset/', config_val)
 
     # Create and return the train + val dataloaders
     train_loader = torch.utils.data.DataLoader(

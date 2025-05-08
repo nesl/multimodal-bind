@@ -166,17 +166,17 @@ def set_loader(opt):
         print("train paired data:")
         with open('../Configs/config_train_A_Contrastive.yaml', 'r') as handle:
             config_train = yaml.load(handle, Loader=yaml.FullLoader)
-            train_dataset, _ = make_dataset('../../MMFI_Dataset/', config_train)
+            train_dataset, _ = make_dataset('/mnt/ssd_8t/jason/MMFI_Dataset/', config_train)
     elif opt.dataset == "train_B":
         print("train paired data:")
         with open('../Configs/config_train_B_Contrastive.yaml', 'r') as handle:
             config_train = yaml.load(handle, Loader=yaml.FullLoader)
-            train_dataset, _ = make_dataset('../../MMFI_Dataset/', config_train)
+            train_dataset, _ = make_dataset('/mnt/ssd_8t/jason/MMFI_Dataset/', config_train)
     elif opt.dataset == "train_AB":
         print("train paired data:")
         with open('../Configs/config_train_AB_Contrastive.yaml', 'r') as handle:
             config_train = yaml.load(handle, Loader=yaml.FullLoader)
-            train_dataset, _ = make_dataset('../../MMFI_Dataset/', config_train)
+            train_dataset, _ = make_dataset('/mnt/ssd_8t/jason/MMFI_Dataset/', config_train)
         
     else:
         raise Exception('invalid training dataset')
