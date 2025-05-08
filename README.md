@@ -25,6 +25,7 @@ The program has been tested in the following environment:
   * [Evaluation on UTD dataset](https://github.com/nesl/multimodal-bind/blob/main/UTD/UTD-README.md)
   * [Evaluation on MMFI dataset](https://github.com/nesl/multimodal-bind/tree/main/MMFI)
   * [Evaluation on PAMAP2 dataset](https://github.com/nesl/multimodal-bind/blob/main/PAMAP2/PAMAP2-README.md)
+  * [Evaluation on SUNRGBD dataset](https://github.com/nesl/multimodal-bind/tree/main/SUN_RGBD_Main)
 * Cross-dataset Evaluation:
   * Training on binded MotionSense and Shoaib datasets, testing on RealWorld dataset.
 
