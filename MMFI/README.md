@@ -4,7 +4,9 @@
 Refer to the [MMFI Webpage] (https://ntu-aiot-lab.github.io/mm-fi) for instructions to download the MMFi Dataset
 Process the data by placing all the data for a particular sample (subject performing an action) into a single `.pickle` file with the keys following the format in `./shared_files/PickleDataset.py`.
 
+After obtaining the dataset, please change all occurrences of `/mnt/ssd_8t/jason/MMFI_Dataset/` with the correct dataset path via find and replace
 ## Running evaluations on the MMFI Dataset
+ 
 
 Please refer to the following subfolders for instructions on how to run the training and evaluation
 - `MMFI_Code_2_FT`: Evaluations after finetuning on two subjects
